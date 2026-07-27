@@ -1,15 +1,17 @@
 ﻿# 发版计划 P0/P1
 
 > **全局计划：** 工作区根目录 `FlyPrint开发计划.md` + `FlyPrint任务清单.md`；全量归档 `FlyPrint总开发计划.md`  
-> 目标：2026-07-22 演示收口 · 更新：2026-07-23 · 与 `fly-print-cloud/docs/agent/release-plan.md` 同步  
-> **M0 已归档（07-22 verify 通过）。** 当前焦点 **M1**（联系人档案等）；本文件仅保留 M0 勾选历史。  
+> 目标：2026-07-22 演示收口 · 更新：2026-07-27 · 与 `fly-print-cloud/docs/agent/release-plan.md` 同步  
+> **M0 已归档（07-22 verify 通过）。** 当前焦点 **M1 收口**（M1-1 已合入 `main`；当前 Edge 工作区有 WebSocket 保活参数改动待验证/提交）；本文件仅保留 M0 勾选历史。  
 > 交付：Compose（含 Demo）+ Edge 安装包 + 第三方简要 Guide；**P0 预演已于 07-22 verify 通过**
 
 ### M1 进度（摘要）
 
-- [x] M1-1c：Edge 页脚运维联系人（姓名+电话）；已合入 `main`；安装包 **1.0.44**
-- [ ] M1-2 / M1-3：横竖打 orientation；触屏加固 + 手册步骤
-- Cloud 侧 M1-1a/b/d/e 见对仓 `fly-print-cloud/docs/agent/release-plan.md`
+- [x] M1-1a～e：Cloud 联系人 CRUD/绑定/Admin 互跳 + Edge 页脚联系人；已合入 `main`；Edge 安装包 **1.0.44**
+- [ ] M1-2：横竖打 `orientation-requested`；当前 Edge 源码未发现实现
+- [~] M1-3：已有 `touch-guard`；Cloud 部署文档含 OS 步骤，待现场验证
+- [ ] M1-4：`toner_low` 黄警；由 Cloud 侧实现，当前未发现本项新增改动
+- [~] M1-5～M1-6：文案/运维文档有工作区改动，待统一检查、定稿并合入
 
 | 产出 | 通过标准 |
 |------|----------|

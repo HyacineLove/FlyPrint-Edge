@@ -351,8 +351,10 @@ class CloudWebSocketClient:
                 async with websockets.connect(
                     self.websocket_url, 
                     additional_headers=headers,
-                    ping_interval=30,
-                    ping_timeout=10
+                    # UAT/公网反代下控制帧易延迟；10s 过紧会导致约 40–50s 闪断。
+                    # 放宽超时，并略拉长 ping 间隔，降低经 Nginx/HTTPS 的误断。
+                    ping_interval=45,
+                    ping_timeout=60,
                 ) as websocket:
                     self.websocket = websocket
                     self.connected = True  # 握手成功

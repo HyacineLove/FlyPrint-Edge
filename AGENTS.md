@@ -9,6 +9,7 @@
 | 协议 / 打印链路 / 部署边界 | `docs/agent/architecture-and-protocols.md` |
 | 现场部署与验证 | 对仓 Cloud `docs/部署与验证.md` |
 | 产品与行为全貌 | 对仓 Cloud `docs/系统说明.md` |
+| 交付文档全图（关联） | 对仓 Cloud `AGENTS.md`「交付文档地图」——使用/运维/验收等册的分工只在那里维护 |
 | 构建 / 测试 / 安装包 | `docs/agent/development-and-verification.md` |
 | 发版 P0/P1 待办（M0） | `docs/agent/release-plan.md`（与 Cloud 同名文件保持同步） |
 | http(s)/ws(s) 双兼容 | `url_scheme.py`；`cloud_api_client.get_websocket_url`；激活/配置校验；见 `architecture-and-protocols.md`「二维码与第三方预览」 |
