@@ -123,6 +123,7 @@ export function createAppController({ mountNode }) {
   }
 
   function handleCloudError(data) {
+    if (!eventMatchesCurrentSession(data)) return;
     const errorCode = data?.error_code || data?.code;
     const message = data?.message || "";
 
@@ -143,6 +144,7 @@ export function createAppController({ mountNode }) {
   }
 
   function handleJobStatus(data) {
+    if (!eventMatchesCurrentSession(data)) return;
     if (data?.job_id) {
       state.session.file.job_id = data.job_id;
       saveSessionState();
@@ -176,6 +178,19 @@ export function createAppController({ mountNode }) {
     ) {
       finishWithResult("success", "");
     }
+  }
+
+  // Ignore late events from an older terminal session or completed job.
+  function eventMatchesCurrentSession(data) {
+    const currentSessionId = state.session?.session_id;
+    if (currentSessionId && data?.session_id && data.session_id !== currentSessionId) {
+      return false;
+    }
+    const currentJobId = state.session?.file?.job_id;
+    if (currentJobId && data?.job_id && data.job_id !== currentJobId) {
+      return false;
+    }
+    return true;
   }
 
   function queuePrintRequest(request) {
