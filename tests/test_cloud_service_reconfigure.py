@@ -40,7 +40,9 @@ class CloudServiceReconfigureTests(unittest.TestCase):
         with patch("cloud_service.unprotect_credentials", return_value={"client_id": "client-1", "client_secret": "secret-1"}), \
              patch("cloud_service.CloudAuthClient"), \
              patch("cloud_service.CloudAPIClient"), \
-             patch.object(service, "_start_websocket") as start_websocket:
+             patch.object(service, "_start_websocket") as start_websocket, \
+             patch.object(service, "sync_ops_contacts", return_value={"success": True}), \
+             patch.object(service, "_start_ops_contacts_sync"):
             result = service.start()
 
         self.assertTrue(result["success"])

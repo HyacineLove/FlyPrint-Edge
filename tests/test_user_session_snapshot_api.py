@@ -62,6 +62,9 @@ class UserSessionSnapshotContractTests(unittest.TestCase):
         def add_message_listener(self, message_type, listener):
             self.listeners.append((message_type, listener))
 
+        def set_ops_contacts_change_handler(self, handler):
+            self.ops_contacts_change_handler = handler
+
         def start(self):
             return {
                 "success": False,
