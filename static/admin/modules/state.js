@@ -48,6 +48,12 @@ export function buildConfigPayloadFromConfig(cfg) {
   const rawCopiesMax = cfg.settings.copies_max;
   const normalizedCopiesMin = rawCopiesMin === "" || rawCopiesMin == null ? "" : Number(rawCopiesMin);
   const normalizedCopiesMax = rawCopiesMax === "" || rawCopiesMax == null ? "" : Number(rawCopiesMax);
+  const rawMaxFileSizeBytes = cfg.settings.max_file_size_bytes;
+  const rawMaxDocumentPages = cfg.settings.max_document_pages;
+  const rawMaxListItems = cfg.settings.max_list_items;
+  const normalizedMaxFileSizeBytes = rawMaxFileSizeBytes === "" || rawMaxFileSizeBytes == null ? "" : Number(rawMaxFileSizeBytes);
+  const normalizedMaxDocumentPages = rawMaxDocumentPages === "" || rawMaxDocumentPages == null ? "" : Number(rawMaxDocumentPages);
+  const normalizedMaxListItems = rawMaxListItems === "" || rawMaxListItems == null ? "" : Number(rawMaxListItems);
 
   return {
     cloud: {
@@ -62,6 +68,9 @@ export function buildConfigPayloadFromConfig(cfg) {
       default_max_upscale: normalizedMaxUpscale,
       copies_min: normalizedCopiesMin,
       copies_max: normalizedCopiesMax,
+      max_file_size_bytes: normalizedMaxFileSizeBytes,
+      max_document_pages: normalizedMaxDocumentPages,
+      max_list_items: normalizedMaxListItems,
       libreoffice_path: cfg.settings.libreoffice_path || "",
     },
   };

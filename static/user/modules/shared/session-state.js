@@ -63,9 +63,15 @@ export function normalizeRuntimeSettings(rawSettings) {
   const copiesMin = Math.max(1, Number.parseInt(settings.copies_min, 10) || 1);
   const parsedMax = Number.parseInt(settings.copies_max, 10) || 3;
   const copiesMax = Math.max(copiesMin, parsedMax);
+  const maxFileSizeBytes = Math.max(0, Number.parseInt(settings.max_file_size_bytes, 10) || 0);
+  const maxDocumentPages = Math.max(0, Number.parseInt(settings.max_document_pages, 10) || 0);
+  const maxListItems = Math.max(0, Number.parseInt(settings.max_list_items, 10) || 0);
   return {
     copies_min: copiesMin,
     copies_max: copiesMax,
+    max_file_size_bytes: maxFileSizeBytes,
+    max_document_pages: maxDocumentPages,
+    max_list_items: maxListItems,
     ops_contacts: normalizeOpsContacts(settings.ops_contacts),
   };
 }

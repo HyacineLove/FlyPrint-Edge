@@ -59,6 +59,24 @@ class ConfigFileEncodingTests(unittest.TestCase):
             self.assertNotIn("pdf_printer_path", config["settings"])
             self.assertNotIn("sumatra_path", config["settings"])
 
+    def test_local_limit_defaults_are_added_to_existing_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(json.dumps({
+                "printer_schema_version": 2,
+                "managed_printers": [],
+                "default_printer_id": None,
+                "settings": {},
+                "network": {},
+                "cloud": {},
+            }), encoding="utf-8")
+
+            settings = PrinterConfig(str(path)).get_full_config()["settings"]
+
+        self.assertEqual(0, settings["max_file_size_bytes"])
+        self.assertEqual(5, settings["max_document_pages"])
+        self.assertEqual(0, settings["max_list_items"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,11 @@
         "default_paper_size": "A4",
         "default_scale_mode": "actual",
         "default_max_upscale": 3.0,
+        "copies_min": 1,
+        "copies_max": 3,
+        "max_file_size_bytes": 0,
+        "max_document_pages": 5,
+        "max_list_items": 0,
         "libreoffice_path": ""
     },
     "network": {

@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import requests
 
+from edge_limits import normalize_local_limits
 from logging_utils import VALID_LOG_LEVELS
 from url_scheme import is_http_or_https_url
 
@@ -46,6 +47,7 @@ class ConfigService:
             settings.get("copies_min"),
             settings.get("copies_max"),
         )
+        settings.update(normalize_local_limits(settings))
         settings["log_level"] = str(settings.get("log_level") or "INFO").strip().upper()
         if settings["log_level"] not in VALID_LOG_LEVELS:
             settings["log_level"] = "INFO"
@@ -134,6 +136,16 @@ class ConfigService:
 
         if settings.get("debug_logging") not in (None, "", True, False):
             errors.append("settings.debug_logging must be a boolean")
+
+        for key in ("max_file_size_bytes", "max_document_pages", "max_list_items"):
+            value = settings.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                if int(value) < 0 or isinstance(value, float) and not value.is_integer():
+                    raise ValueError
+            except (TypeError, ValueError):
+                errors.append(f"settings.{key} must be an integer >= 0")
 
         copies_min = 1
         if settings.get("copies_min") not in (None, ""):

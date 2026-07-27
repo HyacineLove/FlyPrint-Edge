@@ -31,6 +31,36 @@ class ConfigServiceTests(unittest.TestCase):
         self.assertTrue(result["success"])
         get.assert_called_once()
 
+    def test_public_config_exposes_normalized_edge_limits(self):
+        payload = self.service.build_public_config({
+            "cloud": {},
+            "settings": {
+                "max_file_size_bytes": "1048576",
+                "max_document_pages": "8",
+                "max_list_items": "12",
+            },
+            "network": {"bind_address": "127.0.0.1", "port": 7860},
+        })
+
+        self.assertEqual(1048576, payload["settings"]["max_file_size_bytes"])
+        self.assertEqual(8, payload["settings"]["max_document_pages"])
+        self.assertEqual(12, payload["settings"]["max_list_items"])
+
+    def test_validate_rejects_negative_edge_limits(self):
+        errors = self.service.validate({
+            "cloud": {},
+            "settings": {
+                "max_file_size_bytes": -1,
+                "max_document_pages": -1,
+                "max_list_items": -1,
+            },
+            "network": {"bind_address": "127.0.0.1", "port": 7860},
+        })
+
+        self.assertIn("settings.max_file_size_bytes must be an integer >= 0", errors)
+        self.assertIn("settings.max_document_pages must be an integer >= 0", errors)
+        self.assertIn("settings.max_list_items must be an integer >= 0", errors)
+
 
 if __name__ == "__main__":
     unittest.main()

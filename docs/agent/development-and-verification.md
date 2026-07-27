@@ -23,6 +23,17 @@ pyinstaller --noconfirm flyprint-edge.spec
 
 - `runtime/` 已 gitignore（本地 SQLite 投递库不入库）。
 
+## D12 Edge 本地限制
+
+Edge 的限制配置保存在本机 `config.json` 的 `settings`，不下发到 Cloud，也不依赖 Cloud 才能校验：
+
+- `copies_min` / `copies_max`：本地打印份数范围；
+- `max_file_size_bytes`：下载源文件的本地体积上限，`0` 表示不启用；
+- `max_document_pages`：转换后的标准 PDF 页数上限，默认 `5`，`0` 表示不启用；
+- `max_list_items`：本地文件列表/三方清单预留上限，`0` 表示不启用。当前 Edge 没有文件列表接口，因此只提供配置框架，不虚构列表流程。
+
+预览转换完成后，Edge 在本地检查页数；超限直接返回 `edge_limit_exceeded`，不向 Cloud 增加预览结果回传协议。Cloud 的上传大小、页数和文件类型限制仍由 Cloud 独立维护。
+
 ## Cloud 传输地址
 
 - `cloud.base_url` 支持 **http** 与 **https**（受信证书；勿用 `https://localhost` 再改写局域网 IP）。

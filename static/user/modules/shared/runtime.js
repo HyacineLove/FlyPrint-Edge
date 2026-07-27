@@ -190,6 +190,7 @@ export function mapPreviewErrorMessage(errorCode, message) {
   if (code === "node_not_found") return "节点不存在，请联系管理员";
   if (code === "printer_disabled") return "打印机已被禁用，请联系管理员";
   if (code === "printer_not_found") return "打印机不存在，请联系管理员";
+  if (code === "edge_limit_exceeded") return msg || "文件超过终端本地限制，请重新选择文件";
 
   if (msg.includes("下载文件失败") || msg.includes("拉取文件失败")) {
     return "文件拉取失败，请重新扫码上传";

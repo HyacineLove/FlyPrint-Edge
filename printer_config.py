@@ -11,6 +11,12 @@ from copy import deepcopy
 from datetime import datetime
 from typing import List, Dict
 
+from edge_limits import (
+    DEFAULT_MAX_DOCUMENT_PAGES,
+    DEFAULT_MAX_FILE_SIZE_BYTES,
+    DEFAULT_MAX_LIST_ITEMS,
+)
+
 logger = logging.getLogger(__name__)
 
 class PrinterConfig:
@@ -74,6 +80,14 @@ class PrinterConfig:
                 if "copies_max" not in settings:
                     settings["copies_max"] = 3
                     config_updated = True
+                for key, default in {
+                    "max_file_size_bytes": DEFAULT_MAX_FILE_SIZE_BYTES,
+                    "max_document_pages": DEFAULT_MAX_DOCUMENT_PAGES,
+                    "max_list_items": DEFAULT_MAX_LIST_ITEMS,
+                }.items():
+                    if key not in settings:
+                        settings[key] = default
+                        config_updated = True
                 if "log_level" not in settings:
                     settings["log_level"] = "INFO"
                     config_updated = True
@@ -107,6 +121,9 @@ class PrinterConfig:
                 "settings": {
                     "copies_min": 1,
                     "copies_max": 3,
+                    "max_file_size_bytes": DEFAULT_MAX_FILE_SIZE_BYTES,
+                    "max_document_pages": DEFAULT_MAX_DOCUMENT_PAGES,
+                    "max_list_items": DEFAULT_MAX_LIST_ITEMS,
                     "log_level": "INFO",
                     "debug_logging": False,
                     "ops_contacts": [],

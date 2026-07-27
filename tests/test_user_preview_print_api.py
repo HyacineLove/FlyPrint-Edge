@@ -251,6 +251,57 @@ class UserPreviewPrintApiTests(unittest.TestCase):
         self.assertTrue(response["success"])
         download_mock.assert_not_called()
 
+    def test_preview_rejects_canonical_document_over_edge_page_limit(self):
+        source_path = os.path.join(self.temp_dir.name, "preview.pdf")
+        pipeline = Mock()
+        pipeline.resolve_canonical.return_value = CanonicalDocument(
+            self.CONTENT_HASH + "-pdf-v1", Path(source_path), 6
+        )
+        request = DummyBodyRequest({
+            "session_id": self.session_id,
+            "file_id": "file-1",
+            "file_url": "/api/v1/files/file-1",
+            "file_name": "file.pdf",
+            "file_type": "application/pdf",
+            "content_hash": self.CONTENT_HASH,
+            "options": {"page_index": 0},
+        })
+        with patch.object(main, "printer_manager", self.printer_manager), \
+             patch.object(main, "interactive_session_manager", self.session_manager), \
+             patch.object(main, "build_document_pipeline", return_value=pipeline), \
+             patch.object(main, "get_file_manager", return_value=self.file_manager):
+            response = asyncio.run(main.preview(request))
+
+        self.assertEqual(422, response.status_code)
+        self.assertIn("页数超过 Edge 本地页数限制", response.body.decode("utf-8"))
+        pipeline.render_preview.assert_not_called()
+
+    def test_preview_rejects_downloaded_source_over_edge_file_size_limit(self):
+        source_path = Path(self.temp_dir.name) / "source.pdf"
+        source_path.write_bytes(b"0123456789")
+        self.printer_manager.config.config["settings"]["max_file_size_bytes"] = 5
+        pipeline = Mock()
+        pipeline.resolve_canonical.side_effect = lambda _identity, supplier, delete_source=True: supplier()
+        request = DummyBodyRequest({
+            "session_id": self.session_id,
+            "file_id": "file-1",
+            "file_url": "/api/v1/files/file-1",
+            "file_name": "file.pdf",
+            "file_type": "application/pdf",
+            "content_hash": self.CONTENT_HASH,
+            "options": {"page_index": 0},
+        })
+        with patch.object(main, "printer_manager", self.printer_manager), \
+             patch.object(main, "interactive_session_manager", self.session_manager), \
+             patch.object(main, "build_document_pipeline", return_value=pipeline), \
+             patch.object(main, "_download_preview_file", return_value=(str(source_path), None)), \
+             patch.object(main, "get_file_manager", return_value=self.file_manager):
+            response = asyncio.run(main.preview(request))
+
+        self.assertEqual(422, response.status_code)
+        self.assertIn("超过 Edge 本地大小限制", response.body.decode("utf-8"))
+        self.assertFalse(source_path.exists())
+
     def _availability(self, reason):
         snapshot = {
             "printer-state": [5],

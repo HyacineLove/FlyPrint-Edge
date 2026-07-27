@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from printer_utils import PrinterManager
 from cloud_service import CloudService
 from config_service import ConfigService
+from edge_limits import EdgeLimitExceeded, normalize_local_limits, validate_file_size, validate_page_count
 from file_manager import init_file_manager, get_file_manager, is_valid_content_hash
 from interactive_session import InteractiveSessionManager
 from logging_utils import configure_logging
@@ -945,6 +946,7 @@ async def get_qr_code():
     if default_printer and default_printer.get("name"):
         default_printer_capabilities = printer_manager.get_printer_capabilities(default_printer.get("name"))
     copies_min, copies_max = _normalize_copy_limits()
+    local_limits = normalize_local_limits(_get_settings())
     
     return {
         "success": True,
@@ -958,6 +960,7 @@ async def get_qr_code():
         "settings": {
             "copies_min": copies_min,
             "copies_max": copies_max,
+            **local_limits,
             "ops_contacts": _get_ops_contacts(),
         },
         "session_id": session["session_id"],
@@ -1060,6 +1063,12 @@ async def preview(request: Request):
             return JSONResponse(status_code=503, content={"success": False, "message": "文件服务未就绪"})
         cached_payload = file_mgr.get_preview(key)
         if cached_payload:
+            page_limit_message = validate_page_count(cached_payload["page_count"], _get_settings())
+            if page_limit_message:
+                return JSONResponse(
+                    status_code=422,
+                    content={"success": False, "error_code": "edge_limit_exceeded", "message": page_limit_message},
+                )
             logger.info("Preview cache hit: file_id=%s page_index=%s", file_id, page_index)
             return {
                 "success": True,
@@ -1079,9 +1088,23 @@ async def preview(request: Request):
             download_ms = (time.perf_counter() - download_started_at) * 1000
             if not downloaded_path:
                 raise PrintError(ErrorCode.SOURCE_NOT_FOUND, download_error or "preview download failed")
-            return Path(downloaded_path)
+            source_path = Path(downloaded_path)
+            limit_message = validate_file_size(source_path, _get_settings())
+            if limit_message:
+                try:
+                    source_path.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("无法清理超过本地大小限制的预览源文件: %s", source_path)
+                raise EdgeLimitExceeded(limit_message)
+            return source_path
 
         canonical = pipeline.resolve_canonical(identity, source_supplier, delete_source=True)
+        page_limit_message = validate_page_count(canonical.page_count, _get_settings())
+        if page_limit_message:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error_code": "edge_limit_exceeded", "message": page_limit_message},
+            )
         render_started_at = time.perf_counter()
         preview_page = pipeline.render_preview(canonical, PrintOptions.from_mapping(options), page_index)
         image = preview_page.image
@@ -1109,6 +1132,12 @@ async def preview(request: Request):
             (time.perf_counter() - request_started_at) * 1000,
         )
         return {"success": True, "preview_url": data_url, "page_count": page_count, "page_index": resolved_page_index}
+    except EdgeLimitExceeded as e:
+        logger.info("Preview rejected by local Edge limit: %s", e)
+        return JSONResponse(
+            status_code=422,
+            content={"success": False, "error_code": "edge_limit_exceeded", "message": str(e)},
+        )
     except PrintError as e:
         logger.warning(
             "Preview document processing failed: code=%s detail=%s",

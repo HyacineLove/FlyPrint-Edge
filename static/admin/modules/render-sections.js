@@ -174,6 +174,21 @@ function renderSettingsSection(state) {
         <input id="settings_copies_max" type="number" min="1" step="1" data-section="settings" data-key="copies_max" value="${escapeHtml(cfg.copies_max ?? 3)}">
       </div>
       <div class="field">
+        <label for="settings_max_file_size_bytes">Edge 本地文件大小上限（字节）</label>
+        <input id="settings_max_file_size_bytes" type="number" min="0" step="1" data-section="settings" data-key="max_file_size_bytes" value="${escapeHtml(cfg.max_file_size_bytes ?? 0)}">
+        <span class="field-hint">0 表示不启用 Edge 本地体积限制；Cloud 上传限制独立生效。</span>
+      </div>
+      <div class="field">
+        <label for="settings_max_document_pages">Edge 本地文档页数上限</label>
+        <input id="settings_max_document_pages" type="number" min="0" step="1" data-section="settings" data-key="max_document_pages" value="${escapeHtml(cfg.max_document_pages ?? 5)}">
+        <span class="field-hint">按 Edge 转换后的 PDF 页数裁定；0 表示不启用。</span>
+      </div>
+      <div class="field">
+        <label for="settings_max_list_items">Edge 本地列表条数上限</label>
+        <input id="settings_max_list_items" type="number" min="0" step="1" data-section="settings" data-key="max_list_items" value="${escapeHtml(cfg.max_list_items ?? 0)}">
+        <span class="field-hint">供本地文件列表/三方清单接入使用；当前无文件列表接口时不参与流程。</span>
+      </div>
+      <div class="field">
         <label for="settings_libreoffice_path">LibreOffice 路径</label>
         <input id="settings_libreoffice_path" data-section="settings" data-key="libreoffice_path" value="${escapeHtml(cfg.libreoffice_path || "")}">
       </div>

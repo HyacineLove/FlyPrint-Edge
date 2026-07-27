@@ -37,6 +37,10 @@
 - 用户确认后 `/api/print` → `submit_print_params` 回传完整上下文；后续只接受内部文件 URL + Cloud `printer_id`。禁止第三方直打或跳过确认。
 - `tests/ipp_completed_simulator.py` 仅测试，不进生产路径。
 
+### 预览返回边界
+
+Cloud 下发 `preview_file` 后，Edge 本地下载、转换标准 PDF 并向 Edge 用户页返回预览结果。当前协议不要求 Edge 向 Cloud 回传 `preview_result`；Cloud 继续接收用户确认打印时的 `submit_print_params` 以及后续打印状态。Edge 本地预览失败只在本地展示稳定错误，不新增未经确认的 Cloud 回调。
+
 ## 部署与安全边界
 
 - 一体机 = 工控 PC + 直连打印机；kiosk 锁用户页；本地管理依赖物理门锁，默认回环监听。
