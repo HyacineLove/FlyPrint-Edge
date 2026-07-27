@@ -2,7 +2,7 @@
 
 > **全局计划：** 工作区根目录 `FlyPrint开发计划.md` + `FlyPrint任务清单.md`；全量归档 `FlyPrint总开发计划.md`  
 > 目标：2026-07-22 演示收口 · 更新：2026-07-27 · 与 `fly-print-cloud/docs/agent/release-plan.md` 同步  
-> **M0 已归档（07-22 verify 通过）。** 当前焦点 **M1 收口**（M1-1 已合入 `main`；当前 Edge 工作区有 WebSocket 保活参数改动待验证/提交）；本文件仅保留 M0 勾选历史。  
+> **M0 已归档（07-22 verify 通过）。** 当前焦点 **M1 收口**（M1-1 与 WebSocket 保活参数改动已提交 `eb2cd47`；Edge 1.0.45 已构建）；本文件仅保留 M0 勾选历史。  
 > 交付：Compose（含 Demo）+ Edge 安装包 + 第三方简要 Guide；**P0 预演已于 07-22 verify 通过**
 
 ### M1 进度（摘要）
