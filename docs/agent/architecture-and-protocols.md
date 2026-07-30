@@ -57,3 +57,6 @@ PREPARING → SUBMITTING → QUEUED → PRINTING → COMPLETED
 - 预览页「返回」直接回登录扫码页；打印中禁止中断回扫码。用户确认后 `/api/print` 经 `submit_print_params` 回传完整上下文；后续只接受内部文件 URL 和 Cloud `printer_id`。第三方不得直打或跳过确认。
 - Cloud 下发 `preview_file` 后，Edge 本地下载、转换标准 PDF 并向用户页返回结果。预览失败仅在本地展示稳定错误，不新增 `preview_result` 或其他未经确认的 Cloud 回调。
 - 一体机为工控 PC 加直连打印机，kiosk 锁定用户页；本地管理默认仅回环监听，物理门锁不替代 Cloud 的终端身份密码学校验。非回环、代理暴露或远程维护须先确认并补充鉴权。`tests/ipp_completed_simulator.py` 仅用于测试，不进入生产路径。
+## PRP PDF 检查点
+
+当前 Site Portal 身份和 PRP 文件边界见 `site-portal-identity-protocol.md` 与 `prp-file-protocol.md`。PRP 文件字节只在 PRP、Edge 本地临时/标准文件和后续打印机之间流转；Cloud 与 Site Portal 后端不接收文件体。
