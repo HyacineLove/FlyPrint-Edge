@@ -64,6 +64,7 @@ export async function cleanupSessionResources() {
 
 export function clearLocalUserSession() {
   state.file = {};
+  state.identity = null;
   state.session_id = null;
   state.doneResult = null;
   state.pendingPrintRequest = null;

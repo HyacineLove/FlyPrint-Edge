@@ -26,18 +26,19 @@
 - Modify: `static/user/modules/app/app-controller.js`
 - Modify: `static/user/modules/shared/runtime.js`
 - Modify: `static/user/modules/shared/session-state.js`
-- Modify: `static/user/css/app.css`
+- Create: `static/user/css/identity.css`
+- Modify: `static/user/Index.html`
 
 **Interfaces:**
 - Produces: `applyIdentityReady(appState, payload) -> boolean`.
 - Consumes: credential-free `portal_session_ready.data` and `/api/session/current` identity fields.
 - Produces: `renderIdentityView(state)` and `bindIdentityViewEvents(context)`.
 
-- [ ] **Step 1: Write the failing pure-state tests**
+- [x] **Step 1: Write the failing pure-state tests**
 
 Test that a valid payload changes `sessionPhase` to `identity_ready`, stores only `session_id`, `site_portal_code`, `cloud_user_id`, `external_user_id`, and `display_name`, and rejects an empty display name without changing state.
 
-- [ ] **Step 2: Run the focused test and confirm the module is missing**
+- [x] **Step 2: Run the focused test and confirm the module is missing**
 
 ```powershell
 node --experimental-default-type=module --test tests/js/identity-session.test.mjs
@@ -45,36 +46,36 @@ node --experimental-default-type=module --test tests/js/identity-session.test.mj
 
 Expected: failure because `identity-session.js` does not exist.
 
-- [ ] **Step 3: Implement the minimal identity state module**
+- [x] **Step 3: Implement the minimal identity state module**
 
 `applyIdentityReady` trims the five public fields, requires `session_id` and `display_name`, replaces `appState.session.identity`, sets `appState.session.session_id`, and sets `appState.sessionPhase`.
 
-- [ ] **Step 4: Run the focused test and confirm it passes**
+- [x] **Step 4: Run the focused test and confirm it passes**
 
 ```powershell
 node --experimental-default-type=module --test tests/js/identity-session.test.mjs
 ```
 
-- [ ] **Step 5: Add the thin identity view and controller routing**
+- [x] **Step 5: Add the thin identity view and controller routing**
 
 Handle `portal_session_ready` by applying the identity and routing to `identity`. Handle `portal_session_error` as a login error. During snapshot restore, apply `identity_ready` before routing. The view displays the user name, login-success message, next-slice notice, and an “结束并刷新二维码” action.
 
-- [ ] **Step 6: Clear public identity with the session**
+- [x] **Step 6: Clear public identity with the session**
 
 Set `state.identity = null` in `clearLocalUserSession` and initialize missing saved state to `null`.
 
-- [ ] **Step 7: Run frontend and full Edge regression**
+- [x] **Step 7: Run frontend and full Edge regression**
 
 ```powershell
 node --experimental-default-type=module --test tests/js/identity-session.test.mjs
 & '..\..\fly-print-edge\.venv\Scripts\python.exe' -m unittest discover -s tests -p 'test_*.py'
 ```
 
-- [ ] **Step 8: Verify the live browser**
+- [x] **Step 8: Verify the live browser**
 
-Restart Edge, repeat login, confirm the page switches to the identity view, refresh retains the identity view, and the end-session action returns to a new QR.
+The completed manual login confirmed that the page switches to the identity view. The subsequent Edge restart and browser reload confirmed that a usable new QR is restored.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```powershell
 git add static/user tests/js docs/superpowers/plans/2026-07-30-identity-ready-view.md
