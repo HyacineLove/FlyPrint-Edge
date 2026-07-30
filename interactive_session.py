@@ -26,6 +26,10 @@ class InteractiveSessionManager:
                 "terminal_ticket_hash": hashlib.sha256(terminal_ticket.encode("utf-8")).hexdigest() if terminal_ticket else None,
                 "entry_type": entry_type,
                 "integration_request_id": integration_request_id,
+                "site_portal_code": None,
+                "cloud_user_id": None,
+                "external_user_id": None,
+                "display_name": None,
                 "state": "awaiting_preview",
                 "file_id": None,
                 "file_url": None,
@@ -58,6 +62,32 @@ class InteractiveSessionManager:
             if not self._active_session or self._active_session["session_id"] != session_id:
                 return False
             self._active_session["upload_token"] = upload_token
+            self._active_session["updated_at"] = time.time()
+            return True
+
+    def bind_portal_identity(self, data: Dict[str, Any]) -> bool:
+        """Bind only public identity fields; PRP credentials live in PortalSessionManager."""
+        required = {
+            "terminal_session_id",
+            "site_portal_code",
+            "cloud_user_id",
+            "external_user_id",
+            "display_name",
+        }
+        if not isinstance(data, dict) or not required.issubset(data):
+            return False
+        if any(key in data for key in ("access_token", "prp_credential", "cookie", "password")):
+            return False
+        with self._lock:
+            if not self._active_session or self._active_session["session_id"] != data["terminal_session_id"]:
+                return False
+            for key in ("site_portal_code", "cloud_user_id", "external_user_id", "display_name"):
+                value = str(data.get(key) or "").strip()
+                if not value:
+                    return False
+                self._active_session[key] = value
+            self._active_session["entry_type"] = "site_portal"
+            self._active_session["state"] = "identity_ready"
             self._active_session["updated_at"] = time.time()
             return True
 
@@ -365,6 +395,11 @@ class InteractiveSessionManager:
                 snapshot["content_hash"] = self._active_session.get("content_hash")
             if self._active_session.get("initial_print_options"):
                 snapshot["initial_print_options"] = deepcopy(self._active_session["initial_print_options"])
+            if self._active_session.get("site_portal_code"):
+                snapshot["site_portal_code"] = self._active_session["site_portal_code"]
+                snapshot["cloud_user_id"] = self._active_session["cloud_user_id"]
+                snapshot["external_user_id"] = self._active_session["external_user_id"]
+                snapshot["display_name"] = self._active_session["display_name"]
             return snapshot
 
     def clear_session(self, session_id: Optional[str] = None) -> bool:

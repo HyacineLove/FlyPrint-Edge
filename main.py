@@ -35,6 +35,9 @@ from config_service import ConfigService
 from edge_limits import EdgeLimitExceeded, normalize_local_limits, validate_file_size, validate_page_count
 from file_manager import init_file_manager, get_file_manager, is_valid_content_hash
 from interactive_session import InteractiveSessionManager
+from portal_identity_flow import PortalIdentityFlow
+from portal_session import PortalSessionManager
+from site_portal_client import SitePortalClient, SitePortalProtocolError
 from logging_utils import configure_logging
 from portable_temp import get_portable_temp_dir, get_temp_file_path, cleanup_temp_dir
 from windows_startup import get_windows_startup_enabled, set_windows_startup_enabled
@@ -73,6 +76,13 @@ node_id: Optional[str] = None
 main_loop: Optional[asyncio.AbstractEventLoop] = None
 preview_cache: Dict[str, Dict[str, Any]] = {}
 interactive_session_manager = InteractiveSessionManager()
+portal_session_manager = PortalSessionManager()
+site_portal_client = SitePortalClient()
+portal_identity_flow = PortalIdentityFlow(
+    interactive_session_manager,
+    portal_session_manager,
+    site_portal_client,
+)
 
 
 def _report_terminal_session_state(session: Optional[Dict[str, Any]] = None) -> None:
@@ -170,6 +180,7 @@ async def startup_event():
     if cloud_service:
         cloud_service.add_message_listener("preview_file", handle_cloud_message)
         cloud_service.add_message_listener("terminal_occupied", handle_cloud_message)
+        cloud_service.add_message_listener("portal_session_ready", handle_cloud_message)
         cloud_service.add_message_listener("error", handle_cloud_message)
         cloud_service.add_message_listener("cloud_error", handle_cloud_message)
         cloud_service.add_message_listener("job_status", handle_cloud_message)
@@ -296,6 +307,26 @@ def _enrich_message_with_session(message: Dict[str, Any]) -> Optional[Dict[str, 
         logger.debug(" 丢弃与当前会话不匹配的 terminal_occupied")
         return None
 
+    if message_type == "portal_session_ready":
+        try:
+            public_identity = portal_identity_flow.handle_ready(payload, node_id)
+        except SitePortalProtocolError as exc:
+            logger.warning("Site Portal 身份领取失败: %s", exc)
+            return {
+                "type": "portal_session_error",
+                "data": {
+                    "error_code": "site_portal_claim_failed",
+                    "message": "登录结果领取失败，请重新扫码。",
+                },
+            }
+        if not public_identity:
+            logger.debug("丢弃与当前会话不匹配的 portal_session_ready")
+            return None
+        return {
+            "type": "portal_session_ready",
+            "data": public_identity,
+        }
+
     if message_type == "job_status":
         accepted = interactive_session_manager.accept_job_status_event(payload)
         if not accepted:
@@ -362,6 +393,7 @@ def handle_cloud_message(data: Dict[str, Any]):
 async def shutdown_event():
     logger.info(" Edge Server 正在停止...")
     _report_terminal_session_state(None)
+    portal_session_manager.clear()
     
     # 停止文件管理器
     file_mgr = get_file_manager()
@@ -938,6 +970,7 @@ async def get_qr_code():
             path = "/" + path
         upload_url = f"{upload_base}{path}"
 
+    portal_session_manager.clear()
     session = interactive_session_manager.start_session(upload_token=token_data["token"])
     _report_terminal_session_state(session)
     qr_img_url = build_qr_data_url(upload_url)
@@ -1250,6 +1283,7 @@ async def cleanup_preview_file(request: Request):
         if session_id and not interactive_session_manager.clear_session(session_id):
             return JSONResponse(status_code=409, content={"success": False, "message": "当前会话已失效，请重新扫码"})
         if session_id:
+            portal_session_manager.clear(session_id)
             _report_terminal_session_state(None)
         
         # 通过文件管理器清理
