@@ -35,6 +35,19 @@ class InteractiveSessionManagerTests(unittest.TestCase):
         rejected = self.manager.accept_preview_event(_official_preview(session["session_id"], file_id="file-2", ticket_hash=ticket))
         self.assertIsNone(rejected)
 
+    def test_prp_file_binding_exposes_only_public_metadata(self):
+        session = self.manager.start_session()
+        self.assertTrue(self.manager.bind_prp_file(session["session_id"], {
+            "source_origin": "prp", "file_id": "file-1", "file_name": "sample.pdf",
+            "file_type": "application/pdf", "content_hash": "0" * 64, "size": 123,
+            "local_path": "must-not-survive", "access_token": "must-not-survive",
+        }))
+        snapshot = self.manager.build_snapshot()
+        self.assertEqual("preview_ready", snapshot["state"])
+        self.assertEqual("prp", snapshot["source_origin"])
+        self.assertNotIn("local_path", snapshot)
+        self.assertNotIn("access_token", snapshot)
+
     def test_preview_without_session_proof_is_rejected(self):
         self.manager.start_session(upload_token="token-1")
         self.assertIsNone(self.manager.accept_preview_event({

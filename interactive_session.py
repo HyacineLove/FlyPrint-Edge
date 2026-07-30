@@ -32,6 +32,7 @@ class InteractiveSessionManager:
                 "display_name": None,
                 "state": "awaiting_preview",
                 "file_id": None,
+                "source_origin": None,
                 "file_url": None,
                 "file_name": None,
                 "file_type": None,
@@ -62,6 +63,31 @@ class InteractiveSessionManager:
             if not self._active_session or self._active_session["session_id"] != session_id:
                 return False
             self._active_session["upload_token"] = upload_token
+            self._active_session["updated_at"] = time.time()
+            return True
+
+    def bind_prp_file(self, session_id: str, metadata: Dict[str, Any]) -> bool:
+        required = {
+            "source_origin", "file_id", "file_name", "file_type", "content_hash", "size"
+        }
+        if not isinstance(metadata, dict) or not required.issubset(metadata):
+            return False
+        if metadata.get("source_origin") != "prp":
+            return False
+        with self._lock:
+            if not self._active_session or self._active_session["session_id"] != session_id:
+                return False
+            self._active_session["source_origin"] = "prp"
+            self._active_session["file_id"] = metadata["file_id"]
+            self._active_session["file_url"] = None
+            self._active_session["file_name"] = metadata["file_name"]
+            self._active_session["file_type"] = metadata["file_type"]
+            self._active_session["content_hash"] = metadata["content_hash"]
+            self._active_session["size"] = metadata["size"]
+            self._active_session["state"] = "preview_ready"
+            self._active_session["submitted"] = False
+            self._active_session["error_code"] = None
+            self._active_session["error_message"] = None
             self._active_session["updated_at"] = time.time()
             return True
 
@@ -393,6 +419,10 @@ class InteractiveSessionManager:
             }
             if self._active_session.get("content_hash"):
                 snapshot["content_hash"] = self._active_session.get("content_hash")
+            if self._active_session.get("source_origin"):
+                snapshot["source_origin"] = self._active_session.get("source_origin")
+            if self._active_session.get("size") is not None:
+                snapshot["size"] = self._active_session.get("size")
             if self._active_session.get("initial_print_options"):
                 snapshot["initial_print_options"] = deepcopy(self._active_session["initial_print_options"])
             if self._active_session.get("site_portal_code"):
