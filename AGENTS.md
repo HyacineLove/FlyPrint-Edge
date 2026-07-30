@@ -4,7 +4,7 @@
 
 | 任务 | 文档 |
 |------|------|
-| **全局计划 / 当前任务（先读）** | `../FlyPrint总开发计划.md`、`../FlyPrint开发任务清单.md`（本阶段唯一主文档；方案 A，无 `/Auth`） |
+| **全局计划 / 当前任务（先读）** | `../FlyPrint总开发计划.md`、`../FlyPrint开发任务清单.md`（本阶段唯一主文档，无 `/Auth`） |
 | 差距对照 / 定稿数据流 | `../docs/私有域接入-现状与目标差距清单.md`、`../docs/diagrams/refactoring-change-map.drawio.png` |
 | 现状基线 | `../docs/现状系统说明.md`、`../docs/diagrams/current-dataflow.drawio.png` |
 | IPP 架构、协议、打印链路与安全边界 | `docs/agent/architecture-and-protocols.md` |

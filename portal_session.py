@@ -94,4 +94,3 @@ class PortalSessionManager:
                 return False
             self._active = None
             return True
-

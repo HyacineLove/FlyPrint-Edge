@@ -59,4 +59,3 @@ class PortalIdentityFlow:
             self._portal_sessions.clear(session_id)
             raise SitePortalProtocolError("当前终端会话已变化")
         return self._portal_sessions.snapshot()
-

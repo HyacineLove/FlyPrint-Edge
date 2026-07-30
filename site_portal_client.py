@@ -67,4 +67,3 @@ class SitePortalClient:
         if not all(str(payload.get(field) or "").strip() for field in required):
             raise SitePortalProtocolError("Site Portal 领取响应包含空字段")
         return dict(payload)
-
