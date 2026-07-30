@@ -6,6 +6,7 @@ export const api = {
   preview: "/api/preview",
   print: "/api/print",
   cleanup: "/api/cleanup",
+  prpFiles: "/api/prp/files",
 };
 
 function requestError(json, status) {

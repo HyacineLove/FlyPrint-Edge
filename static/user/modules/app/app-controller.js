@@ -7,6 +7,7 @@ import { renderIdentityView, bindIdentityViewEvents } from "../views/identity-vi
 import { renderLoginView, bindLoginViewEvents } from "../views/login-view.js";
 import { renderPreviewView, bindPreviewViewEvents } from "../views/preview-view.js";
 import { renderPrintingView, bindPrintingViewEvents } from "../views/printing-view.js";
+import { renderPRPFilesView, bindPRPFilesViewEvents } from "./prp-files.js";
 import {
   clearLocalUserSession,
   cleanupSessionResources,
@@ -23,6 +24,7 @@ import { applyIdentityReady } from "./identity-session.js";
 const viewRegistry = {
   login: { render: renderLoginView, bind: bindLoginViewEvents },
   identity: { render: renderIdentityView, bind: bindIdentityViewEvents },
+  files: { render: renderPRPFilesView, bind: bindPRPFilesViewEvents },
   preview: { render: renderPreviewView, bind: bindPreviewViewEvents },
   printing: { render: renderPrintingView, bind: bindPrintingViewEvents },
   done: { render: renderDoneView, bind: bindDoneViewEvents },
@@ -110,7 +112,7 @@ export function createAppController({ mountNode }) {
     if (type === "portal_session_ready") {
       if (!applyIdentityReady(state, data)) return;
       saveSessionState();
-      void router.go("identity");
+      void router.go("files");
       return;
     }
 
@@ -237,6 +239,7 @@ export function createAppController({ mountNode }) {
           file_name: normalized.file_name || "鏂囨。",
           file_type: normalized.file_type || "",
           content_hash: normalized.content_hash,
+          source_origin: normalized.source_origin || null,
           task_token: sessionState.file?.task_token || null,
           job_id: normalized.job_id || null,
           page_count: sessionState.file?.page_count || 1,
@@ -291,7 +294,7 @@ export function createAppController({ mountNode }) {
     if (phase === "identity_ready") {
       if (applyIdentityReady(state, snapshot)) {
         saveSessionState();
-        await router.go("identity");
+        await router.go("files");
         return;
       }
     }
