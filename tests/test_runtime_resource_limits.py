@@ -18,6 +18,26 @@ class RuntimeResourceLimitTests(unittest.TestCase):
         self.assertEqual({"sequence": 2}, queue.get_nowait())
         self.assertEqual({"sequence": 3}, queue.get_nowait())
 
+    def test_local_print_status_is_published_to_user_sse_queue(self):
+        queue = asyncio.Queue(maxsize=2)
+        with patch.object(main, "sse_clients", [queue]), patch.object(main, "main_loop", None):
+            main.publish_local_job_status({
+                "job_id": "job-1",
+                "status": "printing",
+                "current_page": 1,
+                "total_pages": 3,
+            })
+
+        self.assertEqual({
+            "type": "job_status",
+            "data": {
+                "job_id": "job-1",
+                "status": "printing",
+                "current_page": 1,
+                "total_pages": 3,
+            },
+        }, queue.get_nowait())
+
     def test_pipeline_factory_starts_new_instance_and_stops_replaced_instance(self):
         instances = []
 

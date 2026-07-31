@@ -76,12 +76,14 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.authorizer = Mock()
         self.print_service = RecordingPrintService()
         self.reporter = RecordingReporter()
+        self.local_events = []
         self.service = PortalPrintService(
             authorizer=self.authorizer,
             print_service=self.print_service,
             config_repo=DummyConfig(),
             session_manager=self.sessions,
             terminal_reporter=self.reporter,
+            local_event_publisher=self.local_events.append,
             executor=InlineExecutor(),
             logger=logging.getLogger("test"),
         )
@@ -126,6 +128,9 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.assertEqual(6, report["impressions_completed"])
         self.assertEqual(4, report["sheets_completed"])
         self.assertEqual(8, report["quota_consumed"])
+        self.assertEqual("completed", self.local_events[-1]["status"])
+        self.assertEqual(6, self.local_events[-1]["current_page"])
+        self.assertEqual(6, self.local_events[-1]["total_pages"])
 
     def test_print_request_uses_canonical_cache_only(self):
         self.authorizer.authorize.return_value = {

@@ -29,6 +29,7 @@ class PortalPrintService:
         config_repo,
         session_manager,
         terminal_reporter,
+        local_event_publisher=None,
         executor=None,
         logger,
     ):
@@ -37,6 +38,7 @@ class PortalPrintService:
         self.config_repo = config_repo
         self.session_manager = session_manager
         self.terminal_reporter = terminal_reporter
+        self.local_event_publisher = local_event_publisher
         self.executor = executor or _EXECUTOR
         self.logger = logger
 
@@ -154,7 +156,9 @@ class PortalPrintService:
                 "current_page": event.current_page,
                 "total_pages": event.total_pages,
             }
-            self.session_manager.accept_job_status_event(payload)
+            accepted = self.session_manager.accept_job_status_event(payload)
+            if accepted and self.local_event_publisher:
+                self.local_event_publisher(accepted)
             if event.state in TERMINAL_STATES and not terminal_seen:
                 terminal_seen = True
                 self._report_terminal(event, page_count, options)

@@ -258,6 +258,20 @@ def _notify_ops_contacts_updated(contacts):
         push()
 
 
+def publish_local_job_status(data: Dict[str, Any]) -> None:
+    """将 Edge 本地 IPP 状态安全推送到用户页的 SSE 连接。"""
+    message = {"type": "job_status", "data": dict(data or {})}
+
+    def push():
+        for queue in list(sse_clients):
+            _enqueue_sse_latest(queue, message)
+
+    if main_loop:
+        main_loop.call_soon_threadsafe(push)
+    else:
+        push()
+
+
 def _enrich_message_with_session(message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     message_type = message.get("type", "")
     payload = message.get("data", {})
@@ -1351,6 +1365,7 @@ async def submit_print(request: Request):
                     config_repo=printer_manager.config,
                     session_manager=interactive_session_manager,
                     terminal_reporter=cloud_service.websocket_client,
+                    local_event_publisher=publish_local_job_status,
                     logger=logger,
                 )
                 result = await asyncio.to_thread(
