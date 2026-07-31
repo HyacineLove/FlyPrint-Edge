@@ -85,6 +85,7 @@ class DummyCloudService:
     def __init__(self):
         self.node_id = "node-123"
         self.websocket_client = DummyWebSocketClient()
+        self.print_authorization_client = Mock()
         self.print_job_handler = None
         self.status_reporter = DummyStatusReporter()
 
@@ -150,14 +151,26 @@ class UserPreviewPrintApiTests(unittest.TestCase):
         self.assertEqual(3, data["options"]["copies"])
         self.assertEqual("cloud-printer-1", data["printer_id"])
 
-    def test_print_rejects_prp_source_before_cloud_or_ipp(self):
+    def test_prp_source_uses_authorized_local_print_service(self):
+        self.session_manager.bind_portal_identity({
+            "terminal_session_id": self.session_id,
+            "site_portal_code": "official",
+            "cloud_user_id": "cloud-user-1",
+            "external_user_id": "portal-user-1",
+            "display_name": "User",
+        })
         self.session_manager.bind_prp_file(self.session_id, {
             "source_origin": "prp", "file_id": "file-1", "file_name": "sample.pdf",
             "file_type": "application/pdf", "content_hash": self.CONTENT_HASH, "size": 10,
         })
-        response = self._submit(self._print_request(1))
-        self.assertEqual(409, response.status_code)
-        self.assertIn(b"print_not_available_in_slice", response.body)
+        self.session_manager.set_preview_page_count(self.session_id, "file-1", 1)
+        portal_print = Mock()
+        portal_print.submit.return_value = {"success": True, "job_id": "job-1"}
+        with patch.object(main, "PortalPrintService", return_value=portal_print), \
+             patch.object(main, "build_print_service", return_value=Mock()):
+            response = self._submit(self._print_request(1))
+        self.assertTrue(response["success"])
+        portal_print.submit.assert_called_once()
         self.assertEqual([], self.cloud_service.websocket_client.sent_messages)
 
     def test_submit_print_clamps_copies_to_configured_minimum(self):

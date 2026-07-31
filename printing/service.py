@@ -162,6 +162,7 @@ class IppPrintService:
         detected_fault: ErrorCode | None = None
         cancel_sent = False
         last_signature = None
+        last_impressions_completed = 0
         while time.monotonic() < deadline:
             try:
                 job = job_snapshot(client, ref.job_id)
@@ -171,6 +172,8 @@ class IppPrintService:
             state = int((job.get("job-state") or [0])[0] or 0)
             current_page_raw = (job.get("job-impressions-completed") or [None])[0]
             current_page = min(total_pages, max(0, int(current_page_raw))) if current_page_raw is not None else None
+            if current_page is not None:
+                last_impressions_completed = current_page
             signature = (state, current_page, tuple(job.get("job-state-reasons", [])), tuple(printer.get("printer-state-reasons", [])))
             if signature != last_signature:
                 self.logger.info(
@@ -192,22 +195,38 @@ class IppPrintService:
                     request.job_id,
                     current_page=total_pages,
                     total_pages=total_pages,
+                    impressions_completed=total_pages,
                     details={"ipp_job_id": ref.job_id, "completion_basis": "ipp_job_completed"},
                 )
                 if callback:
                     callback(event)
                 return event
             if state == 8:
-                raise PrintError(ErrorCode.IPP_JOB_ABORTED, "device aborted the IPP job", details={"job_reasons": job.get("job-state-reasons", [])})
+                raise PrintError(
+                    ErrorCode.IPP_JOB_ABORTED,
+                    "device aborted the IPP job",
+                    details={
+                        "job_reasons": job.get("job-state-reasons", []),
+                        "impressions_completed": last_impressions_completed,
+                    },
+                )
             if state == 7:
                 if detected_fault:
-                    raise PrintError(detected_fault, "faulted IPP job was canceled", details={"job_reasons": job.get("job-state-reasons", [])})
+                    raise PrintError(
+                        detected_fault,
+                        "faulted IPP job was canceled",
+                        details={
+                            "job_reasons": job.get("job-state-reasons", []),
+                            "impressions_completed": last_impressions_completed,
+                        },
+                    )
                 event = PrintEvent(
                     PrintState.CANCELED,
                     STATE_MESSAGES[PrintState.CANCELED],
                     request.job_id,
                     current_page=current_page,
                     total_pages=total_pages,
+                    impressions_completed=last_impressions_completed,
                     error_code=ErrorCode.PRINT_CANCELED,
                 )
                 if callback:
@@ -242,7 +261,11 @@ class IppPrintService:
             raise PrintError(ErrorCode.IPP_CANCEL_FAILED, str(exc), state=PrintState.UNCONFIRMED) from exc
         if terminal != 7:
             raise PrintError(ErrorCode.IPP_CANCEL_FAILED, f"timeout cancellation ended in state {terminal}", state=PrintState.UNCONFIRMED)
-        raise PrintError(ErrorCode.PRINT_TIMEOUT, f"IPP job exceeded {self.timeout_seconds:.0f}s")
+        raise PrintError(
+            ErrorCode.PRINT_TIMEOUT,
+            f"IPP job exceeded {self.timeout_seconds:.0f}s",
+            details={"impressions_completed": last_impressions_completed},
+        )
 
     @staticmethod
     def _send_cancel(client: IppClient, job_id: int) -> None:
@@ -271,7 +294,14 @@ class IppPrintService:
 
     def _error_event(self, request: PrintRequest, callback: Optional[EventCallback], exc: PrintError) -> PrintEvent:
         self.logger.error("ipp_print_failed job_id=%s code=%s state=%s reason=%s details=%r", request.job_id, exc.code.value, exc.state.value, exc.technical_message, exc.details)
-        event = PrintEvent(exc.state, exc.user_message, request.job_id, error_code=exc.code, details=exc.details)
+        event = PrintEvent(
+            exc.state,
+            exc.user_message,
+            request.job_id,
+            impressions_completed=int(exc.details.get("impressions_completed") or 0),
+            error_code=exc.code,
+            details=exc.details,
+        )
         if callback:
             callback(event)
         return event
@@ -292,6 +322,7 @@ class IppPrintService:
             request.job_id,
             current_page=current_page,
             total_pages=total_pages,
+            impressions_completed=current_page,
             details=details or {},
         )
         if callback:

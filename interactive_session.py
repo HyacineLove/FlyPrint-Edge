@@ -37,6 +37,7 @@ class InteractiveSessionManager:
                 "file_name": None,
                 "file_type": None,
                 "content_hash": None,
+                "page_count": None,
                 "job_id": None,
                 "print_options": None,
                 "initial_print_options": None,
@@ -83,11 +84,27 @@ class InteractiveSessionManager:
             self._active_session["file_name"] = metadata["file_name"]
             self._active_session["file_type"] = metadata["file_type"]
             self._active_session["content_hash"] = metadata["content_hash"]
+            self._active_session["page_count"] = None
             self._active_session["size"] = metadata["size"]
             self._active_session["state"] = "preview_ready"
             self._active_session["submitted"] = False
             self._active_session["error_code"] = None
             self._active_session["error_message"] = None
+            self._active_session["updated_at"] = time.time()
+            return True
+
+    def set_preview_page_count(self, session_id: str, file_id: str, page_count: int) -> bool:
+        """记录 Edge 预览确认的单份页数，供打印授权和结算使用。"""
+        if not isinstance(page_count, int) or page_count < 1:
+            return False
+        with self._lock:
+            if (
+                not self._active_session
+                or self._active_session["session_id"] != session_id
+                or self._active_session.get("file_id") != file_id
+            ):
+                return False
+            self._active_session["page_count"] = page_count
             self._active_session["updated_at"] = time.time()
             return True
 
@@ -110,6 +127,7 @@ class InteractiveSessionManager:
                 "file_name",
                 "file_type",
                 "content_hash",
+                "page_count",
                 "size",
                 "job_id",
                 "print_options",
@@ -261,6 +279,7 @@ class InteractiveSessionManager:
             self._active_session["file_name"] = data.get("file_name")
             self._active_session["file_type"] = data.get("file_type")
             self._active_session["content_hash"] = data.get("content_hash")
+            self._active_session["page_count"] = None
             if data.get("terminal_ticket_hash") and not self._active_session.get("terminal_ticket_hash"):
                 self._active_session["terminal_ticket_hash"] = data.get("terminal_ticket_hash")
             self._active_session["occupied"] = False
@@ -331,6 +350,45 @@ class InteractiveSessionManager:
                 "job_id": job_id,
                 "print_options": deepcopy(self._active_session.get("print_options")),
             }
+
+    def attach_authorized_job(
+        self, session_id: str, file_id: str, job_id: str
+    ) -> bool:
+        """绑定由 Cloud 授权、随后由本机直接执行的任务。"""
+        with self._lock:
+            if (
+                not self._active_session
+                or self._active_session["session_id"] != session_id
+                or self._active_session.get("file_id") != file_id
+                or not self._active_session.get("submitted")
+                or self._active_session.get("job_id")
+                or not job_id
+            ):
+                return False
+            self._active_session["job_id"] = job_id
+            self._active_session["state"] = "printing"
+            self._active_session["job_status"] = "preparing"
+            self._active_session["updated_at"] = time.time()
+            return True
+
+    def reject_print_submission(
+        self, session_id: str, file_id: str, error_code: str, message: str
+    ) -> bool:
+        with self._lock:
+            if (
+                not self._active_session
+                or self._active_session["session_id"] != session_id
+                or self._active_session.get("file_id") != file_id
+            ):
+                return False
+            self._active_session["submitted"] = True
+            self._active_session["state"] = "failed"
+            self._active_session["job_status"] = "failed"
+            self._active_session["error_code"] = error_code
+            self._active_session["error_message"] = message
+            self._active_session["job_message"] = message
+            self._active_session["updated_at"] = time.time()
+            return True
 
     def revert_print_submission(self, session_id: str, file_id: str) -> bool:
         with self._lock:

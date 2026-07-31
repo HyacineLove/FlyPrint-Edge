@@ -81,6 +81,7 @@ class IppServiceStateTests(unittest.TestCase):
         self.assertEqual(4, events[0].total_pages)
         self.assertEqual(4, event.current_page)
         self.assertEqual(4, event.total_pages)
+        self.assertEqual(4, event.impressions_completed)
 
     def test_active_fault_is_canceled_and_reported_as_original_fault(self):
         jobs = [
@@ -100,7 +101,34 @@ class IppServiceStateTests(unittest.TestCase):
                     self.request, 1, self.ref, Mock(), threading.Event(), None
                 )
         self.assertEqual(ErrorCode.PRINTER_OUT_OF_PAPER, raised.exception.code)
+        self.assertEqual(0, raised.exception.details["impressions_completed"])
         cancel.assert_called_once_with(unittest.mock.ANY, 42)
+
+    def test_canceled_job_retains_last_reported_impressions(self):
+        jobs = [
+            {
+                "job-state": [5],
+                "job-state-reasons": ["job-printing"],
+                "job-impressions-completed": [2],
+            },
+            {
+                "job-state": [7],
+                "job-state-reasons": ["job-canceled-by-operator"],
+                "job-impressions-completed": [2],
+            },
+        ]
+        with (
+            patch("printing.service.job_snapshot", side_effect=jobs),
+            patch(
+                "printing.service.printer_snapshot",
+                return_value={"printer-state-reasons": ["none"]},
+            ),
+        ):
+            event = self.service._monitor(
+                self.request, 4, self.ref, Mock(), threading.Event(), None
+            )
+        self.assertEqual(PrintState.CANCELED, event.state)
+        self.assertEqual(2, event.impressions_completed)
 
     def test_job_query_failure_is_unconfirmed(self):
         with patch(

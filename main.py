@@ -45,7 +45,8 @@ from portable_temp import get_portable_temp_dir, get_temp_file_path, cleanup_tem
 from windows_startup import get_windows_startup_enabled, set_windows_startup_enabled
 from print_layout import resolve_layout_options
 from print_options import normalize_print_options, to_cloud_duplex
-from print_runtime import build_document_pipeline, stop_document_pipelines
+from print_runtime import build_document_pipeline, build_print_service, stop_document_pipelines
+from portal_print_service import PortalPrintService
 from printing.documents import DocumentIdentity
 from printing.domain import ErrorCode, PrintError, PrintOptions
 
@@ -1201,6 +1202,10 @@ async def preview(request: Request):
                     content={"success": False, "error_code": "edge_limit_exceeded", "message": page_limit_message},
                 )
             logger.info("Preview cache hit: file_id=%s page_index=%s", file_id, page_index)
+            if session_id:
+                interactive_session_manager.set_preview_page_count(
+                    session_id, file_id, int(cached_payload["page_count"])
+                )
             return {
                 "success": True,
                 "preview_url": cached_payload["preview_url"],
@@ -1260,6 +1265,10 @@ async def preview(request: Request):
             "page_count": page_count,
             "page_index": resolved_page_index,
         })
+        if session_id:
+            interactive_session_manager.set_preview_page_count(
+                session_id, file_id, int(page_count)
+            )
         logger.info(
             "Preview generated: file_id=%s page_index=%s page_count=%s download_ms=%.1f prepare_render_ms=%.1f total_ms=%.1f",
             file_id,
@@ -1311,15 +1320,6 @@ async def submit_print(request: Request):
         if not session_id or not interactive_session_manager.matches(session_id, file_id):
             return JSONResponse(status_code=409, content={"success": False, "message": "当前会话已失效，请重新扫码"})
         active_session = interactive_session_manager.get_active_session() or {}
-        if active_session.get("source_origin") == "prp":
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "success": False,
-                    "error_code": "print_not_available_in_slice",
-                    "message": "当前切片仅支持预览 PRP 文件。",
-                },
-            )
         options["copies"] = _clamp_copy_count(options.get("copies"))
 
         if cloud_service and cloud_service.websocket_client:
@@ -1335,6 +1335,33 @@ async def submit_print(request: Request):
                     "error_code": "printer_cloud_registration_incomplete",
                     "message": "打印机尚未注册到云端，请联系管理员。",
                 })
+            if active_session.get("source_origin") == "prp":
+                if not cloud_service.print_authorization_client:
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "success": False,
+                            "error_code": "print_authorization_unavailable",
+                            "message": "打印授权服务暂不可用。",
+                        },
+                    )
+                portal_print = PortalPrintService(
+                    authorizer=cloud_service.print_authorization_client,
+                    print_service=build_print_service(printer_manager.config, logger),
+                    config_repo=printer_manager.config,
+                    session_manager=interactive_session_manager,
+                    terminal_reporter=cloud_service.websocket_client,
+                    logger=logger,
+                )
+                result = await asyncio.to_thread(
+                    portal_print.submit,
+                    active_session,
+                    printer,
+                    options,
+                )
+                if not result.get("success"):
+                    return JSONResponse(status_code=409, content=result)
+                return result
             if not interactive_session_manager.mark_print_submitted(session_id, file_id, options):
                 return JSONResponse(status_code=409, content={"success": False, "message": "打印请求已提交，请勿重复点击"})
 

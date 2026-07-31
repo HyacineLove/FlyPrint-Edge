@@ -192,6 +192,7 @@ class PrintEvent:
     job_id: str
     current_page: Optional[int] = None
     total_pages: Optional[int] = None
+    impressions_completed: Optional[int] = None
     error_code: Optional[ErrorCode] = None
     details: Mapping[str, Any] = field(default_factory=dict)
 
