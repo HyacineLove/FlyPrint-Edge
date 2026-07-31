@@ -202,6 +202,60 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("content_hash: normalized.content_hash", controller)
         self.assertIn("content_hash: session.file.content_hash", preview_view)
 
+    def test_prp_preview_does_not_require_a_public_file_url(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+
+        self.assertIn('session.file?.source_origin === "prp"', preview_view)
+        self.assertNotIn(
+            "!session.file?.file_id || !session.file?.file_url || previewLoading",
+            preview_view,
+        )
+
+    def test_prp_preview_back_returns_to_files_without_restarting_cycle(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        api = read_source(BASE_DIR / "modules/shared/api.js")
+
+        self.assertIn('prpSelection: "/api/prp/selection"', api)
+        self.assertRegex(
+            preview_view,
+            r'if\s*\(\s*isPRPSource\s*\)\s*\{[\s\S]*?postJson\(api\.prpSelection[\s\S]*?router\.go\("files"\)',
+        )
+
+    def test_prp_files_view_has_terminal_navigation_and_countdown(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+
+        self.assertIn('id="filesCountdown"', files_view)
+        self.assertIn('id="filesExit"', files_view)
+        self.assertIn('aria-live="polite"', files_view)
+        self.assertIn("window.setInterval", files_view)
+        self.assertIn("await restartCycle()", files_view)
+        self.assertIn("window.clearInterval", files_view)
+
+    def test_prp_files_view_guards_duplicate_and_stale_requests(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+        api = read_source(BASE_DIR / "modules/shared/api.js")
+
+        self.assertIn("createRequestGate", files_view)
+        self.assertIn("requestGate.isCurrent", files_view)
+        self.assertIn("requestGate.cancel()", files_view)
+        self.assertIn("signal: request.signal", files_view)
+        self.assertIn("fetch(url, { cache: \"no-store\", ...options })", api)
+
+    def test_prp_files_page_size_fits_the_terminal_canvas(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+
+        self.assertIn("page_size=6", files_view)
+        self.assertNotIn("page_size=20", files_view)
+
+    def test_prp_files_css_uses_the_terminal_canvas_and_visual_language(self):
+        files_css = read_source(BASE_DIR / "css/files.css")
+
+        self.assertIn("width: 1080px", files_css)
+        self.assertIn("min-height: 1920px", files_css)
+        self.assertIn(".files-terminal-card", files_css)
+        self.assertIn("linear-gradient", files_css)
+        self.assertIn(".files-countdown", files_css)
+
     def test_removed_legacy_pages_do_not_reintroduce_duplicate_frontend_logic(self):
         self.assertFalse((BASE_DIR / "main.js").exists())
         self.assertEqual([], list((BASE_DIR / "modules/pages").glob("*.js")))

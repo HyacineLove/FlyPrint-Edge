@@ -49,7 +49,12 @@ class _PRPHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/pdf")
             self.send_header("Content-Length", str(declared_length))
             self.send_header("X-Content-SHA256", declared_hash)
-            self.send_header("Content-Disposition", 'attachment; filename="sample.pdf"')
+            disposition = (
+                "attachment; filename*=utf-8''Kimi%E5%8F%91%E7%A5%A8.pdf"
+                if type(self).mode == "unicode_filename"
+                else 'attachment; filename="sample.pdf"'
+            )
+            self.send_header("Content-Disposition", disposition)
             self.end_headers()
             self.wfile.write(PDF_BYTES)
             return
@@ -115,6 +120,14 @@ class PRPClientTests(unittest.TestCase):
             self.assertEqual(PDF_SHA256, metadata["sha256"])
             self.assertEqual("sample.pdf", metadata["name"])
             self.assertFalse(Path(str(destination) + ".part").exists())
+
+    def test_download_accepts_utf8_filename_parameter(self):
+        _PRPHandler.mode = "unicode_filename"
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.pdf"
+            metadata = self.client.download_file(self.access, "file-1", destination)
+
+        self.assertEqual("Kimi发票.pdf", metadata["name"])
 
     def test_base_url_rejects_userinfo_query_and_fragment(self):
         for base_url in (

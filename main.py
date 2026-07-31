@@ -1108,6 +1108,24 @@ async def select_prp_file(file_id: str, request: Request):
             content={"success": False, "error_code": code},
         )
 
+@app.post("/api/prp/selection")
+async def clear_prp_selection(request: Request):
+    body = await request.json()
+    session_id = body.get("session_id")
+    file_id = interactive_session_manager.clear_prp_selection(session_id)
+    if not file_id:
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error_code": "prp_selection_not_active"},
+        )
+
+    prp_file_selection_manager.clear_session(session_id)
+    file_mgr = get_file_manager()
+    if file_mgr:
+        file_mgr.release_preview_resource(file_id, reason="prp_deselect")
+    _report_terminal_session_state(interactive_session_manager.get_active_session())
+    return {"success": True, "state": "identity_ready"}
+
 @app.post("/api/preview")
 async def preview(request: Request):
     request_started_at = time.perf_counter()

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import main
 from interactive_session import InteractiveSessionManager
@@ -93,6 +93,33 @@ class PRPEndpointTests(unittest.TestCase):
         self.assertEqual("identity_ready", self.interactive.build_snapshot()["state"])
         destination = self.selections.destination_for(self.session_id, "file-1")
         self.assertFalse(Path(str(destination) + ".part").exists())
+
+    def test_clear_selection_preserves_portal_session_and_releases_preview(self):
+        self.interactive.bind_portal_identity({
+            "terminal_session_id": self.session_id, "site_portal_code": "official",
+            "cloud_user_id": "cloud-1", "external_user_id": "external-1",
+            "display_name": "User",
+        })
+        preview_manager = Mock()
+        with patch.object(main, "interactive_session_manager", self.interactive), \
+             patch.object(main, "portal_session_manager", self.portal), \
+             patch.object(main, "prp_file_selection_manager", self.selections), \
+             patch.object(main, "prp_client", _FakePRPClient()), \
+             patch.object(main, "get_file_manager", return_value=preview_manager):
+            asyncio.run(
+                main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
+            )
+            response = asyncio.run(
+                main.clear_prp_selection(_Request({"session_id": self.session_id}))
+            )
+
+        self.assertTrue(response["success"])
+        self.assertEqual("identity_ready", self.interactive.build_snapshot()["state"])
+        self.assertIsNotNone(self.portal.get_access_context(self.session_id))
+        self.assertEqual({}, self.selections.snapshot(self.session_id))
+        preview_manager.release_preview_resource.assert_called_once_with(
+            "file-1", reason="prp_deselect"
+        )
 
 
 if __name__ == "__main__":

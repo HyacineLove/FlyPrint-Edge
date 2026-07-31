@@ -7,6 +7,7 @@ export const api = {
   print: "/api/print",
   cleanup: "/api/cleanup",
   prpFiles: "/api/prp/files",
+  prpSelection: "/api/prp/selection",
 };
 
 function requestError(json, status) {
@@ -15,17 +16,18 @@ function requestError(json, status) {
   return error;
 }
 
-export async function getJson(url) {
-  const res = await fetch(url, { cache: "no-store" });
+export async function getJson(url, options = {}) {
+  const res = await fetch(url, { cache: "no-store", ...options });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw requestError(json, res.status);
   return json;
 }
 
-export async function postJson(url, data) {
+export async function postJson(url, data, options = {}) {
   const res = await fetch(url, {
+    ...options,
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     body: JSON.stringify(data || {}),
   });
   const json = await res.json().catch(() => ({}));

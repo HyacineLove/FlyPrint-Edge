@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 from email.message import Message
+from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlsplit, urlunsplit
@@ -240,6 +241,11 @@ class PRPClient:
         message = Message()
         message["Content-Disposition"] = disposition
         name = message.get_param("filename", header="Content-Disposition")
+        if isinstance(name, tuple):
+            try:
+                name = collapse_rfc2231_value(name, errors="strict")
+            except (LookupError, UnicodeError) as exc:
+                raise PRPClientError("invalid_prp_response") from exc
         if not isinstance(name, str) or not name or Path(name).name != name:
             raise PRPClientError("invalid_prp_response")
         return name

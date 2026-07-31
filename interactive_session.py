@@ -91,6 +91,43 @@ class InteractiveSessionManager:
             self._active_session["updated_at"] = time.time()
             return True
 
+    def clear_prp_selection(self, session_id: str) -> Optional[str]:
+        """清除当前 PRP 文件，但保留已登录的 Site Portal 用户会话。"""
+        with self._lock:
+            if (
+                not self._active_session
+                or self._active_session["session_id"] != session_id
+                or self._active_session.get("source_origin") != "prp"
+            ):
+                return None
+            file_id = self._active_session.get("file_id")
+            if not file_id:
+                return None
+            for field in (
+                "source_origin",
+                "file_id",
+                "file_url",
+                "file_name",
+                "file_type",
+                "content_hash",
+                "size",
+                "job_id",
+                "print_options",
+                "initial_print_options",
+                "error_code",
+                "error_message",
+                "printer_fault",
+                "job_status",
+                "job_message",
+                "current_page",
+                "total_pages",
+            ):
+                self._active_session[field] = None
+            self._active_session["submitted"] = False
+            self._active_session["state"] = "identity_ready"
+            self._active_session["updated_at"] = time.time()
+            return file_id
+
     def bind_portal_identity(self, data: Dict[str, Any]) -> bool:
         """Bind only public identity fields; PRP credentials live in PortalSessionManager."""
         required = {

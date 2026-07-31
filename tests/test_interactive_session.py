@@ -48,6 +48,28 @@ class InteractiveSessionManagerTests(unittest.TestCase):
         self.assertNotIn("local_path", snapshot)
         self.assertNotIn("access_token", snapshot)
 
+    def test_clear_prp_selection_returns_to_identity_without_clearing_user(self):
+        session = self.manager.start_session()
+        self.assertTrue(self.manager.bind_portal_identity({
+            "terminal_session_id": session["session_id"],
+            "site_portal_code": "official",
+            "cloud_user_id": "cloud-1",
+            "external_user_id": "external-1",
+            "display_name": "User",
+        }))
+        self.assertTrue(self.manager.bind_prp_file(session["session_id"], {
+            "source_origin": "prp", "file_id": "file-1", "file_name": "sample.pdf",
+            "file_type": "application/pdf", "content_hash": "0" * 64, "size": 123,
+        }))
+
+        self.assertEqual("file-1", self.manager.clear_prp_selection(session["session_id"]))
+
+        snapshot = self.manager.build_snapshot()
+        self.assertEqual("identity_ready", snapshot["state"])
+        self.assertEqual("cloud-1", snapshot["cloud_user_id"])
+        self.assertIsNone(snapshot["file_id"])
+        self.assertNotIn("source_origin", snapshot)
+
     def test_preview_without_session_proof_is_rejected(self):
         self.manager.start_session(upload_token="token-1")
         self.assertIsNone(self.manager.accept_preview_event({

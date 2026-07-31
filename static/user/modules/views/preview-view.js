@@ -1,4 +1,4 @@
-import { postJson } from "../shared/api.js";
+import { api, postJson } from "../shared/api.js";
 import { applyPrinterCapabilityState, setOptionDisabledState } from "../shared/capabilities.js";
 import { on, q, setPreviewBg, setText } from "../shared/dom.js";
 import {
@@ -88,7 +88,7 @@ export function renderPreviewView() {
 `;
 }
 
-export function bindPreviewViewEvents({ appState, queuePrintRequest, restartCycle }) {
+export function bindPreviewViewEvents({ appState, router, queuePrintRequest, restartCycle }) {
   const session = appState.session;
   const isPRPSource = session.file?.source_origin === "prp";
   if (!session.file?.file_id || (!isPRPSource && !session.file?.file_url)) {
@@ -122,6 +122,7 @@ export function bindPreviewViewEvents({ appState, queuePrintRequest, restartCycl
   let previewPageCount = 0;
   let previewFailureMode = false;
   let printSubmitting = false;
+  let prpReturnInFlight = false;
   let previewControlsLocked = true;
   if (isPRPSource) {
     setText(["97_462"], "打印将在下一切片开放");
@@ -249,7 +250,7 @@ export function bindPreviewViewEvents({ appState, queuePrintRequest, restartCycl
   }
 
   async function renderPreview(pageIndex = 0, blockUi = false) {
-    if (!session.file?.file_id || !session.file?.file_url || previewLoading || previewFailureMode) return false;
+    if (!session.file?.file_id || (!isPRPSource && !session.file?.file_url) || previewLoading || previewFailureMode) return false;
     previewLoading = true;
     setPreviewLoadingPlaceholder(true);
     if (blockUi) {
@@ -355,8 +356,30 @@ export function bindPreviewViewEvents({ appState, queuePrintRequest, restartCycl
     }
   }
 
-  on("97_454", () => {
+  on("97_454", async () => {
     if (!previewFailureMode && !previewFirstLoadDone) return;
+    if (isPRPSource) {
+      if (prpReturnInFlight) return;
+      prpReturnInFlight = true;
+      pausePreviewCountdown();
+      setPreviewControlsLocked(true);
+      try {
+        await postJson(api.prpSelection, {
+          session_id: currentSessionId() || undefined,
+        });
+        session.file = {};
+        appState.sessionPhase = "identity_ready";
+        saveSessionState();
+        await router.go("files");
+      } catch (error) {
+        setText(["97_480"], `-${error?.message || "返回文件列表失败，请重试"}-`);
+        setPreviewControlsLocked(false);
+        resumePreviewCountdown(false);
+      } finally {
+        prpReturnInFlight = false;
+      }
+      return;
+    }
     void restartCycle();
   });
 
