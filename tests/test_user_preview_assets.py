@@ -211,6 +211,20 @@ class UserPreviewAssetTests(unittest.TestCase):
             preview_view,
         )
 
+    def test_prp_preview_uses_the_same_print_submission_gate_as_other_sources(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+
+        self.assertNotIn("打印将在下一切片开放", preview_view)
+        self.assertNotRegex(
+            preview_view,
+            r"setInteractionDisabled\(q\(\"97_460\"\),\s*locked\s*\|\|\s*isPRPSource\)",
+        )
+        self.assertNotRegex(
+            preview_view,
+            r'on\("97_460",\s*\(\)\s*=>\s*\{\s*if\s*\(isPRPSource\)\s*return;',
+        )
+        self.assertIn("queuePrintRequest({", preview_view)
+
     def test_prp_preview_back_returns_to_files_without_restarting_cycle(self):
         preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
         api = read_source(BASE_DIR / "modules/shared/api.js")

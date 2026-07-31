@@ -6,7 +6,7 @@
 #define MyLauncherExeName "flyprint-launcher.exe"
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.48"
+  #define MyAppVersion "1.0.49"
 #endif
 
 [Setup]

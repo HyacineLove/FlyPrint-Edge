@@ -124,9 +124,6 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   let printSubmitting = false;
   let prpReturnInFlight = false;
   let previewControlsLocked = true;
-  if (isPRPSource) {
-    setText(["97_462"], "打印将在下一切片开放");
-  }
 
   function setPreviewCountdownDisplay(value) {
     setText(["77_44", "97_449"], String(Math.max(0, value)));
@@ -173,7 +170,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
       previewFailureMode ||
       printSubmitting ||
       Boolean(previewRefreshTimer);
-    setInteractionDisabled(q("97_460"), locked || isPRPSource);
+    setInteractionDisabled(q("97_460"), locked);
   }
 
   function setPreviewControlsLocked(locked, allowBackWhenLocked = false) {
@@ -425,7 +422,6 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     await renderPreview(previewCurrentPage + 1, false);
   });
   on("97_460", () => {
-    if (isPRPSource) return;
     if (
       !previewFirstLoadDone ||
       previewLoading ||
