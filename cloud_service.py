@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from cloud_auth import CloudAuthClient
 from cloud_api_client import CloudAPIClient
+from print_authorization_client import PrintAuthorizationClient
 from cloud_websocket_client import CloudWebSocketClient, PrintJobHandler
 from cloud_heartbeat_service import HeartbeatService
 from edge_node_info import EdgeNodeInfo
@@ -42,6 +43,7 @@ class CloudService:
         self.heartbeat_service = None
         self.print_job_handler = None
         self.status_reporter = None
+        self.print_authorization_client = None
         self.last_error: Optional[str] = None
         self.node_missing_remote = False
 
@@ -105,6 +107,7 @@ class CloudService:
 
         if self.api_client:
             self.api_client.node_id = None
+        self.print_authorization_client = None
         if self.print_job_handler:
             self.print_job_handler.node_id = None
         if self.heartbeat_service:
@@ -113,6 +116,7 @@ class CloudService:
         if self.status_reporter:
             self.status_reporter.stop()
             self.status_reporter = None
+            self.print_authorization_client = None
         if self.websocket_client:
             self.websocket_client.running = False
             self.websocket_client.connected = False
@@ -155,6 +159,13 @@ class CloudService:
             )
             if self.node_id:
                 self.api_client.node_id = self.node_id
+                self.print_authorization_client = PrintAuthorizationClient(
+                    runtime["base_url"],
+                    self.node_id,
+                    self.auth_client,
+                )
+            else:
+                self.print_authorization_client = None
 
             self.heartbeat_interval = self.config.get("heartbeat_interval", 30)
 
@@ -749,6 +760,7 @@ class CloudService:
                 self.printer_manager.config.config.setdefault("cloud", {}).update(staged)
                 self.printer_manager.config.save_config()
             self.auth_client = self.api_client = self.websocket_client = None
+            self.print_authorization_client = None
             self.heartbeat_service = self.print_job_handler = self.status_reporter = None
             return self.start()
         except Exception as exc:
@@ -770,6 +782,7 @@ class CloudService:
         self.heartbeat_service = None
         self.print_job_handler = None
         self.status_reporter = None
+        self.print_authorization_client = None
         if self.printer_manager and hasattr(self.printer_manager, "config"):
             cloud_config = self.printer_manager.config.config.setdefault("cloud", {})
             for key in ("node_id", "credential_blob", "profile_pending"):
