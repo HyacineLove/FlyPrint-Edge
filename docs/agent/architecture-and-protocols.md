@@ -46,6 +46,7 @@ PREPARING → SUBMITTING → QUEUED → PRINTING → COMPLETED
 - 权威投递状态为 `job_delivery_store.py` 的 `runtime/edge_job_delivery.sqlite3`（inbox + outbox），内存 map 仅作缓存。IPP 终态与稳定 UUID `event_id` 同事务写入；`completed`、`failed`、`canceled`、`unconfirmed` 在收到 `job_update_ack/accepted` 前持续排队。
 - 重连或未 ACK 使用最大 60 秒的指数退避且不过期；`rejected` 停止重试，记录本地通信故障，绝不记为打印成功。Edge 重启恢复 `received`；打印中断上报 `unconfirmed` 与 `edge_restart_result_unknown`，绝不重打旧作业。
 - 本地事件可保留 `job-impressions-completed` 页数进度；Cloud 状态消息不发送或持久化逐页进度。用户刷新从交互会话快照恢复阶段和页数；`UNCONFIRMED` 在管理员解除设备锁前不得返回二维码页。
+- Site Portal 直打的明确终态会上报最终 `job-impressions-completed`，再按单面/双面和份数边界换算实体纸张及额度；`UNCONFIRMED` 不携带用量字段。终态报告仍先进入同一 SQLite outbox，Cloud ACK 前不得丢弃。
 
 ## 二维码、会话与安全边界
 
@@ -54,8 +55,9 @@ PREPARING → SUBMITTING → QUEUED → PRINTING → COMPLETED
 - 刷新二维码或新会话上报会作废 Cloud 未完成 ticket；手机旧票进入或上传必须返回明确错误。`preview_file` 必须携带 `terminal_session_id` 与 `terminal_ticket_hash`，第三方另带 `integration_request_id`，且须与当前会话一致才绑定；无 ticket hash 时可由 `terminal_occupied` 或首次有效预览绑定。
 - 每台 Edge 由 Cloud 配置一个默认 Site Portal；用户扫码后由 Cloud 自动跳转。浏览器左划返回时仍可回到公网 H5 重新选择其他已配置入口。
 - Site Portal 登录成功后，Cloud 只下发 `portal_session_ready`（领取地址、一次性领取码、终端会话和 Cloud 用户）。Edge 必须先匹配当前 `terminal_session_id` 与票据哈希，再向 Site Portal 原子领取身份和 PRP 访问凭证；凭证仅保存在 `PortalSessionManager` 进程内存中，不进入交互会话快照、SSE 或日志。领取失败明确报错，不自动重试或切换链路。
-- 预览页「返回」直接回登录扫码页；打印中禁止中断回扫码。用户确认后 `/api/print` 经 `submit_print_params` 回传完整上下文；后续只接受内部文件 URL 和 Cloud `printer_id`。第三方不得直打或跳过确认。
+- 预览页「返回」直接回登录扫码页；打印中禁止中断回扫码。HMAC 第三方任务确认后仍经 `submit_print_params` 回传完整上下文。Site Portal/PRP 文件确认后由 Edge 携同终端会话、Site Portal、打印参数和稳定 `confirmation_id` 向 Cloud 原子授权，得到唯一 Cloud `job_id` 后才允许本地 IPP 提交。
 - Cloud 下发 `preview_file` 后，Edge 本地下载、转换标准 PDF 并向用户页返回结果。预览失败仅在本地展示稳定错误，不新增 `preview_result` 或其他未经确认的 Cloud 回调。
+- PRP 文件在预览阶段已生成标准 PDF；打印阶段必须按 `content_hash` 命中该缓存，缓存缺失即明确失败，不重新向 PRP 下载，也不把文件体送入 Cloud。
 - 一体机为工控 PC 加直连打印机，kiosk 锁定用户页；本地管理默认仅回环监听，物理门锁不替代 Cloud 的终端身份密码学校验。非回环、代理暴露或远程维护须先确认并补充鉴权。`tests/ipp_completed_simulator.py` 仅用于测试，不进入生产路径。
 ## PRP PDF 检查点
 
