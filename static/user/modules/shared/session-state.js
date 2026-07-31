@@ -23,12 +23,14 @@ function loadState() {
       : {
           options: createDefaultOptions(),
           file: {},
+          identity: null,
           pendingPrintRequest: null,
         };
   } catch {
     return {
       options: createDefaultOptions(),
       file: {},
+      identity: null,
       pendingPrintRequest: null,
     };
   }
@@ -84,6 +86,7 @@ export function createDefaultCapabilityState() {
 }
 
 export const state = loadState();
+state.identity = state.identity && typeof state.identity === "object" ? state.identity : null;
 state.runtimeSettings = normalizeRuntimeSettings(state.runtimeSettings);
 state.opsContacts = normalizeOpsContacts(state.opsContacts || state.runtimeSettings?.ops_contacts);
 state.capabilityState =

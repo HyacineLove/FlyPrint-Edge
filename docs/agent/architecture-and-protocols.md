@@ -52,7 +52,11 @@ PREPARING → SUBMITTING → QUEUED → PRINTING → COMPLETED
 - `cloud.base_url` 支持受信证书的 HTTP/HTTPS；WebSocket 由 `url_scheme.py` 映射为 WS/WSS，REST 与文件下载跟随同一 base URL。若二维码配置含 `localhost` 或 `127.0.0.1`，仅改写为本机局域网 IP；禁止 `https://localhost` 后改写，也不得另设第二套二维码接口。
 - 用户扫码进门签发 `terminal_ticket` 后，Cloud 下行 `terminal_occupied`（含 `msg_id`，Edge ACK）。登录页遮挡二维码，刷新仍可用；占用态暂停 60 秒后自动换码。不轮询 HTTP。断线时 Cloud 记为 pending，Edge 重连上报 `terminal_session_state` 后补发。
 - 刷新二维码或新会话上报会作废 Cloud 未完成 ticket；手机旧票进入或上传必须返回明确错误。`preview_file` 必须携带 `terminal_session_id` 与 `terminal_ticket_hash`，第三方另带 `integration_request_id`，且须与当前会话一致才绑定；无 ticket hash 时可由 `terminal_occupied` 或首次有效预览绑定。
-- 每台 Edge 的登录源由 Cloud 管理端配置为 `official` 或一个已启用的 Provider；用户扫码后由 Cloud 直达该登录源，不在手机端选择多个入口。
+- 每台 Edge 由 Cloud 配置一个默认 Site Portal；用户扫码后由 Cloud 自动跳转。浏览器左划返回时仍可回到公网 H5 重新选择其他已配置入口。
+- Site Portal 登录成功后，Cloud 只下发 `portal_session_ready`（领取地址、一次性领取码、终端会话和 Cloud 用户）。Edge 必须先匹配当前 `terminal_session_id` 与票据哈希，再向 Site Portal 原子领取身份和 PRP 访问凭证；凭证仅保存在 `PortalSessionManager` 进程内存中，不进入交互会话快照、SSE 或日志。领取失败明确报错，不自动重试或切换链路。
 - 预览页「返回」直接回登录扫码页；打印中禁止中断回扫码。用户确认后 `/api/print` 经 `submit_print_params` 回传完整上下文；后续只接受内部文件 URL 和 Cloud `printer_id`。第三方不得直打或跳过确认。
 - Cloud 下发 `preview_file` 后，Edge 本地下载、转换标准 PDF 并向用户页返回结果。预览失败仅在本地展示稳定错误，不新增 `preview_result` 或其他未经确认的 Cloud 回调。
 - 一体机为工控 PC 加直连打印机，kiosk 锁定用户页；本地管理默认仅回环监听，物理门锁不替代 Cloud 的终端身份密码学校验。非回环、代理暴露或远程维护须先确认并补充鉴权。`tests/ipp_completed_simulator.py` 仅用于测试，不进入生产路径。
+## PRP PDF 检查点
+
+当前 Site Portal 身份和 PRP 文件边界见 `site-portal-identity-protocol.md` 与 `prp-file-protocol.md`。PRP 文件字节只在 PRP、Edge 本地临时/标准文件和后续打印机之间流转；Cloud 与 Site Portal 后端不接收文件体。

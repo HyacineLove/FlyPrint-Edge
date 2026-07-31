@@ -35,6 +35,11 @@ from config_service import ConfigService
 from edge_limits import EdgeLimitExceeded, normalize_local_limits, validate_file_size, validate_page_count
 from file_manager import init_file_manager, get_file_manager, is_valid_content_hash
 from interactive_session import InteractiveSessionManager
+from portal_identity_flow import PortalIdentityFlow
+from portal_session import PortalSessionManager
+from prp_client import PRPClient, PRPClientError
+from prp_file_selection import PRPFileSelectionManager
+from site_portal_client import SitePortalClient, SitePortalProtocolError
 from logging_utils import configure_logging
 from portable_temp import get_portable_temp_dir, get_temp_file_path, cleanup_temp_dir
 from windows_startup import get_windows_startup_enabled, set_windows_startup_enabled
@@ -73,6 +78,15 @@ node_id: Optional[str] = None
 main_loop: Optional[asyncio.AbstractEventLoop] = None
 preview_cache: Dict[str, Dict[str, Any]] = {}
 interactive_session_manager = InteractiveSessionManager()
+portal_session_manager = PortalSessionManager()
+prp_client = PRPClient()
+prp_file_selection_manager = PRPFileSelectionManager(Path(get_portable_temp_dir()))
+site_portal_client = SitePortalClient()
+portal_identity_flow = PortalIdentityFlow(
+    interactive_session_manager,
+    portal_session_manager,
+    site_portal_client,
+)
 
 
 def _report_terminal_session_state(session: Optional[Dict[str, Any]] = None) -> None:
@@ -170,6 +184,7 @@ async def startup_event():
     if cloud_service:
         cloud_service.add_message_listener("preview_file", handle_cloud_message)
         cloud_service.add_message_listener("terminal_occupied", handle_cloud_message)
+        cloud_service.add_message_listener("portal_session_ready", handle_cloud_message)
         cloud_service.add_message_listener("error", handle_cloud_message)
         cloud_service.add_message_listener("cloud_error", handle_cloud_message)
         cloud_service.add_message_listener("job_status", handle_cloud_message)
@@ -296,6 +311,26 @@ def _enrich_message_with_session(message: Dict[str, Any]) -> Optional[Dict[str, 
         logger.debug(" 丢弃与当前会话不匹配的 terminal_occupied")
         return None
 
+    if message_type == "portal_session_ready":
+        try:
+            public_identity = portal_identity_flow.handle_ready(payload, node_id)
+        except SitePortalProtocolError as exc:
+            logger.warning("Site Portal 身份领取失败: %s", exc)
+            return {
+                "type": "portal_session_error",
+                "data": {
+                    "error_code": "site_portal_claim_failed",
+                    "message": "登录结果领取失败，请重新扫码。",
+                },
+            }
+        if not public_identity:
+            logger.debug("丢弃与当前会话不匹配的 portal_session_ready")
+            return None
+        return {
+            "type": "portal_session_ready",
+            "data": public_identity,
+        }
+
     if message_type == "job_status":
         accepted = interactive_session_manager.accept_job_status_event(payload)
         if not accepted:
@@ -362,6 +397,10 @@ def handle_cloud_message(data: Dict[str, Any]):
 async def shutdown_event():
     logger.info(" Edge Server 正在停止...")
     _report_terminal_session_state(None)
+    active = interactive_session_manager.get_active_session()
+    if active:
+        prp_file_selection_manager.clear_session(active["session_id"])
+    portal_session_manager.clear()
     
     # 停止文件管理器
     file_mgr = get_file_manager()
@@ -938,6 +977,10 @@ async def get_qr_code():
             path = "/" + path
         upload_url = f"{upload_base}{path}"
 
+    previous_session = interactive_session_manager.get_active_session()
+    if previous_session:
+        prp_file_selection_manager.clear_session(previous_session["session_id"])
+    portal_session_manager.clear()
     session = interactive_session_manager.start_session(upload_token=token_data["token"])
     _report_terminal_session_state(session)
     qr_img_url = build_qr_data_url(upload_url)
@@ -1011,6 +1054,84 @@ async def events(request: Request):
 async def get_current_interactive_session():
     return interactive_session_manager.build_snapshot()
 
+@app.get("/api/prp/files")
+async def list_prp_files(session_id: str, page: int = 1, page_size: int = 20):
+    access_context = portal_session_manager.get_access_context(session_id)
+    if not access_context or not interactive_session_manager.matches(session_id):
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "error_code": "portal_session_invalid"},
+        )
+    try:
+        result = await asyncio.to_thread(
+            prp_client.list_files, access_context, page, page_size
+        )
+        return result
+    except PRPClientError as exc:
+        status_code = 400 if exc.code == "invalid_pagination" else 502
+        return JSONResponse(
+            status_code=status_code,
+            content={"success": False, "error_code": exc.code},
+        )
+
+@app.post("/api/prp/files/{file_id}/select")
+async def select_prp_file(file_id: str, request: Request):
+    body = await request.json()
+    session_id = body.get("session_id")
+    access_context = portal_session_manager.get_access_context(session_id)
+    if not access_context or not interactive_session_manager.matches(session_id):
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "error_code": "portal_session_invalid"},
+        )
+    destination = None
+    downloaded_source = None
+    try:
+        destination = prp_file_selection_manager.destination_for(session_id, file_id)
+        downloaded = await asyncio.to_thread(
+            prp_client.download_file, access_context, file_id, destination
+        )
+        downloaded_source = Path(downloaded["path"])
+        public = prp_file_selection_manager.bind(
+            session_id, downloaded, downloaded_source
+        )
+        if not interactive_session_manager.bind_prp_file(session_id, public):
+            prp_file_selection_manager.clear_session(session_id)
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "error_code": "session_binding_failed"},
+            )
+        return {"success": True, "file": public}
+    except (PRPClientError, ValueError) as exc:
+        if destination is not None:
+            destination.unlink(missing_ok=True)
+            Path(str(destination) + ".part").unlink(missing_ok=True)
+        if downloaded_source is not None:
+            downloaded_source.unlink(missing_ok=True)
+        code = exc.code if isinstance(exc, PRPClientError) else "invalid_prp_response"
+        return JSONResponse(
+            status_code=502,
+            content={"success": False, "error_code": code},
+        )
+
+@app.post("/api/prp/selection")
+async def clear_prp_selection(request: Request):
+    body = await request.json()
+    session_id = body.get("session_id")
+    file_id = interactive_session_manager.clear_prp_selection(session_id)
+    if not file_id:
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error_code": "prp_selection_not_active"},
+        )
+
+    prp_file_selection_manager.clear_session(session_id)
+    file_mgr = get_file_manager()
+    if file_mgr:
+        file_mgr.release_preview_resource(file_id, reason="prp_deselect")
+    _report_terminal_session_state(interactive_session_manager.get_active_session())
+    return {"success": True, "state": "identity_ready"}
+
 @app.post("/api/preview")
 async def preview(request: Request):
     request_started_at = time.perf_counter()
@@ -1025,8 +1146,18 @@ async def preview(request: Request):
         file_type = body.get("file_type")
         content_hash = body.get("content_hash")
         options = _normalize_request_options(body.get("options") or {})
+        active_session = interactive_session_manager.get_active_session() or {}
+        is_prp_source = (
+            active_session.get("source_origin") == "prp"
+            and active_session.get("session_id") == session_id
+            and active_session.get("file_id") == file_id
+        )
+        if is_prp_source:
+            file_name = active_session.get("file_name")
+            file_type = active_session.get("file_type")
+            content_hash = active_session.get("content_hash")
 
-        if not file_id or not file_url:
+        if not file_id or (not file_url and not is_prp_source):
             logger.warning("Preview request rejected: missing file_id or file_url")
             return JSONResponse(status_code=400, content={"success": False, "message": "参数不完整: file_id, file_url 必需"})
         if not is_valid_content_hash(content_hash):
@@ -1084,7 +1215,12 @@ async def preview(request: Request):
         def source_supplier():
             nonlocal download_ms
             download_started_at = time.perf_counter()
-            downloaded_path, download_error = _download_preview_file(file_url, file_name, file_id)
+            if is_prp_source:
+                source_path = prp_file_selection_manager.get_source(session_id, file_id)
+                downloaded_path = str(source_path) if source_path else None
+                download_error = None if source_path else "PRP source is unavailable"
+            else:
+                downloaded_path, download_error = _download_preview_file(file_url, file_name, file_id)
             download_ms = (time.perf_counter() - download_started_at) * 1000
             if not downloaded_path:
                 raise PrintError(ErrorCode.SOURCE_NOT_FOUND, download_error or "preview download failed")
@@ -1099,6 +1235,8 @@ async def preview(request: Request):
             return source_path
 
         canonical = pipeline.resolve_canonical(identity, source_supplier, delete_source=True)
+        if is_prp_source:
+            prp_file_selection_manager.release(session_id, file_id)
         page_limit_message = validate_page_count(canonical.page_count, _get_settings())
         if page_limit_message:
             return JSONResponse(
@@ -1172,6 +1310,16 @@ async def submit_print(request: Request):
             return JSONResponse(status_code=503, content={"success": False, "message": "设备未就绪"})
         if not session_id or not interactive_session_manager.matches(session_id, file_id):
             return JSONResponse(status_code=409, content={"success": False, "message": "当前会话已失效，请重新扫码"})
+        active_session = interactive_session_manager.get_active_session() or {}
+        if active_session.get("source_origin") == "prp":
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "success": False,
+                    "error_code": "print_not_available_in_slice",
+                    "message": "当前切片仅支持预览 PRP 文件。",
+                },
+            )
         options["copies"] = _clamp_copy_count(options.get("copies"))
 
         if cloud_service and cloud_service.websocket_client:
@@ -1250,6 +1398,8 @@ async def cleanup_preview_file(request: Request):
         if session_id and not interactive_session_manager.clear_session(session_id):
             return JSONResponse(status_code=409, content={"success": False, "message": "当前会话已失效，请重新扫码"})
         if session_id:
+            prp_file_selection_manager.clear_session(session_id)
+            portal_session_manager.clear(session_id)
             _report_terminal_session_state(None)
         
         # 通过文件管理器清理

@@ -26,8 +26,13 @@ class InteractiveSessionManager:
                 "terminal_ticket_hash": hashlib.sha256(terminal_ticket.encode("utf-8")).hexdigest() if terminal_ticket else None,
                 "entry_type": entry_type,
                 "integration_request_id": integration_request_id,
+                "site_portal_code": None,
+                "cloud_user_id": None,
+                "external_user_id": None,
+                "display_name": None,
                 "state": "awaiting_preview",
                 "file_id": None,
+                "source_origin": None,
                 "file_url": None,
                 "file_name": None,
                 "file_type": None,
@@ -58,6 +63,94 @@ class InteractiveSessionManager:
             if not self._active_session or self._active_session["session_id"] != session_id:
                 return False
             self._active_session["upload_token"] = upload_token
+            self._active_session["updated_at"] = time.time()
+            return True
+
+    def bind_prp_file(self, session_id: str, metadata: Dict[str, Any]) -> bool:
+        required = {
+            "source_origin", "file_id", "file_name", "file_type", "content_hash", "size"
+        }
+        if not isinstance(metadata, dict) or not required.issubset(metadata):
+            return False
+        if metadata.get("source_origin") != "prp":
+            return False
+        with self._lock:
+            if not self._active_session or self._active_session["session_id"] != session_id:
+                return False
+            self._active_session["source_origin"] = "prp"
+            self._active_session["file_id"] = metadata["file_id"]
+            self._active_session["file_url"] = None
+            self._active_session["file_name"] = metadata["file_name"]
+            self._active_session["file_type"] = metadata["file_type"]
+            self._active_session["content_hash"] = metadata["content_hash"]
+            self._active_session["size"] = metadata["size"]
+            self._active_session["state"] = "preview_ready"
+            self._active_session["submitted"] = False
+            self._active_session["error_code"] = None
+            self._active_session["error_message"] = None
+            self._active_session["updated_at"] = time.time()
+            return True
+
+    def clear_prp_selection(self, session_id: str) -> Optional[str]:
+        """清除当前 PRP 文件，但保留已登录的 Site Portal 用户会话。"""
+        with self._lock:
+            if (
+                not self._active_session
+                or self._active_session["session_id"] != session_id
+                or self._active_session.get("source_origin") != "prp"
+            ):
+                return None
+            file_id = self._active_session.get("file_id")
+            if not file_id:
+                return None
+            for field in (
+                "source_origin",
+                "file_id",
+                "file_url",
+                "file_name",
+                "file_type",
+                "content_hash",
+                "size",
+                "job_id",
+                "print_options",
+                "initial_print_options",
+                "error_code",
+                "error_message",
+                "printer_fault",
+                "job_status",
+                "job_message",
+                "current_page",
+                "total_pages",
+            ):
+                self._active_session[field] = None
+            self._active_session["submitted"] = False
+            self._active_session["state"] = "identity_ready"
+            self._active_session["updated_at"] = time.time()
+            return file_id
+
+    def bind_portal_identity(self, data: Dict[str, Any]) -> bool:
+        """Bind only public identity fields; PRP credentials live in PortalSessionManager."""
+        required = {
+            "terminal_session_id",
+            "site_portal_code",
+            "cloud_user_id",
+            "external_user_id",
+            "display_name",
+        }
+        if not isinstance(data, dict) or not required.issubset(data):
+            return False
+        if any(key in data for key in ("access_token", "prp_credential", "cookie", "password")):
+            return False
+        with self._lock:
+            if not self._active_session or self._active_session["session_id"] != data["terminal_session_id"]:
+                return False
+            for key in ("site_portal_code", "cloud_user_id", "external_user_id", "display_name"):
+                value = str(data.get(key) or "").strip()
+                if not value:
+                    return False
+                self._active_session[key] = value
+            self._active_session["entry_type"] = "site_portal"
+            self._active_session["state"] = "identity_ready"
             self._active_session["updated_at"] = time.time()
             return True
 
@@ -363,8 +456,17 @@ class InteractiveSessionManager:
             }
             if self._active_session.get("content_hash"):
                 snapshot["content_hash"] = self._active_session.get("content_hash")
+            if self._active_session.get("source_origin"):
+                snapshot["source_origin"] = self._active_session.get("source_origin")
+            if self._active_session.get("size") is not None:
+                snapshot["size"] = self._active_session.get("size")
             if self._active_session.get("initial_print_options"):
                 snapshot["initial_print_options"] = deepcopy(self._active_session["initial_print_options"])
+            if self._active_session.get("site_portal_code"):
+                snapshot["site_portal_code"] = self._active_session["site_portal_code"]
+                snapshot["cloud_user_id"] = self._active_session["cloud_user_id"]
+                snapshot["external_user_id"] = self._active_session["external_user_id"]
+                snapshot["display_name"] = self._active_session["display_name"]
             return snapshot
 
     def clear_session(self, session_id: Optional[str] = None) -> bool:

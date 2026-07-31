@@ -3,9 +3,11 @@ import { createRouter } from "./router.js";
 import { UserSseClient } from "./sse-client.js";
 import { initTouchRestrictions } from "../shared/touch-guard.js";
 import { renderDoneView, bindDoneViewEvents } from "../views/done-view.js";
+import { renderIdentityView, bindIdentityViewEvents } from "../views/identity-view.js";
 import { renderLoginView, bindLoginViewEvents } from "../views/login-view.js";
 import { renderPreviewView, bindPreviewViewEvents } from "../views/preview-view.js";
 import { renderPrintingView, bindPrintingViewEvents } from "../views/printing-view.js";
+import { renderPRPFilesView, bindPRPFilesViewEvents } from "./prp-files.js";
 import {
   clearLocalUserSession,
   cleanupSessionResources,
@@ -17,9 +19,12 @@ import {
 } from "../shared/runtime.js";
 import { api, getJson } from "../shared/api.js";
 import { currentSessionId, saveSessionState, setDoneResult, setOpsContacts, setPendingPrintRequest } from "../shared/session-state.js";
+import { applyIdentityReady } from "./identity-session.js";
 
 const viewRegistry = {
   login: { render: renderLoginView, bind: bindLoginViewEvents },
+  identity: { render: renderIdentityView, bind: bindIdentityViewEvents },
+  files: { render: renderPRPFilesView, bind: bindPRPFilesViewEvents },
   preview: { render: renderPreviewView, bind: bindPreviewViewEvents },
   printing: { render: renderPrintingView, bind: bindPrintingViewEvents },
   done: { render: renderDoneView, bind: bindDoneViewEvents },
@@ -100,6 +105,24 @@ export function createAppController({ mountNode }) {
           expiresAt: data?.expires_at || null,
           message: "终端使用中\n请稍候或点击刷新",
         });
+      }
+      return;
+    }
+
+    if (type === "portal_session_ready") {
+      if (!applyIdentityReady(state, data)) return;
+      saveSessionState();
+      void router.go("files");
+      return;
+    }
+
+    if (type === "portal_session_error") {
+      if (state.currentView === "login") {
+        currentViewApi?.setTerminalOccupied?.(false);
+        currentViewApi?.setLoginErrorCountdown?.(
+          data?.message || "登录结果领取失败，请重新扫码。",
+          data?.error_code || "site_portal_claim_failed",
+        );
       }
       return;
     }
@@ -216,6 +239,7 @@ export function createAppController({ mountNode }) {
           file_name: normalized.file_name || "鏂囨。",
           file_type: normalized.file_type || "",
           content_hash: normalized.content_hash,
+          source_origin: normalized.source_origin || null,
           task_token: sessionState.file?.task_token || null,
           job_id: normalized.job_id || null,
           page_count: sessionState.file?.page_count || 1,
@@ -265,6 +289,14 @@ export function createAppController({ mountNode }) {
     if (phase === "preview_ready") {
       await router.go("preview");
       return;
+    }
+
+    if (phase === "identity_ready") {
+      if (applyIdentityReady(state, snapshot)) {
+        saveSessionState();
+        await router.go("files");
+        return;
+      }
     }
 
     if (phase === "print_submitted" || phase === "printing") {

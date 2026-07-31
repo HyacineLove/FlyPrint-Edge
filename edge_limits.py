@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 DEFAULT_MAX_FILE_SIZE_BYTES = 0
 DEFAULT_MAX_DOCUMENT_PAGES = 5
 DEFAULT_MAX_LIST_ITEMS = 0
+DEFAULT_MAX_PRP_DOWNLOAD_BYTES = 50 * 1024 * 1024
 
 
 class EdgeLimitExceeded(ValueError):
