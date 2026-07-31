@@ -79,7 +79,7 @@ class CloudServiceReconfigureTests(unittest.TestCase):
         manager = Mock()
         manager.config = config
         manager.get_printer_capabilities.return_value = {
-            "page_size": ["A4"],
+            "page_size": ["iso_a4_210x297mm"],
             "color_model": ["color"],
             "duplex": ["simplex", "longedge"],
             "resolution": ["600dpi"],
@@ -106,6 +106,7 @@ class CloudServiceReconfigureTests(unittest.TestCase):
         payload = service.api_client.register_printers.call_args.args[0][0]
         self.assertEqual("631", payload["port_info"])
         self.assertIsInstance(payload["port_info"], str)
+        self.assertEqual(["A4"], payload["capabilities"]["paper_sizes"])
 
     def test_reconfigure_preserves_existing_node_id(self):
         service = CloudService(

@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional
 from cloud_auth import CloudAuthClient
 from cloud_api_client import CloudAPIClient
 from print_authorization_client import PrintAuthorizationClient
+from printing.domain import MEDIA_BY_PAPER
 from cloud_websocket_client import CloudWebSocketClient, PrintJobHandler
 from cloud_heartbeat_service import HeartbeatService
 from edge_node_info import EdgeNodeInfo
@@ -61,6 +62,35 @@ class CloudService:
         if isinstance(port_info, dict):
             return str(port_info.get("port") or "")
         return str(port_info or "")
+
+    def _cloud_printer_capabilities(self, raw_capabilities: Dict[str, Any]) -> Dict[str, Any]:
+        """将 IPP 协议能力转换为 Cloud 授权使用的产品层能力。"""
+        raw_capabilities = dict(raw_capabilities or {})
+        paper_names = {value: key for key, value in MEDIA_BY_PAPER.items()}
+        paper_sizes = [
+            paper_names.get(str(paper_size), str(paper_size))
+            for paper_size in raw_capabilities.get("page_size", ["A4"])[:10]
+        ]
+        color_supported = raw_capabilities.get("color_supported")
+        if color_supported is None:
+            color_supported = any(
+                value in {"rgb", "color", "colour"}
+                for value in (str(item).lower() for item in raw_capabilities.get("color_model", []))
+            )
+        duplex_supported = raw_capabilities.get("duplex_supported")
+        if duplex_supported is None:
+            duplex_supported = any(
+                value not in {"none", "simplex"}
+                for value in (str(item).lower() for item in raw_capabilities.get("duplex", []))
+            )
+        return {
+            "paper_sizes": paper_sizes,
+            "color_support": bool(color_supported),
+            "duplex_support": bool(duplex_supported),
+            "resolution": self._get_resolution_string(raw_capabilities.get("resolution", ["600dpi"])),
+            "print_speed": "unknown",
+            "media_types": raw_capabilities.get("media_type", ["Plain"])[:8],
+        }
 
     def _cloud_config_ready(self) -> tuple[bool, list[str]]:
         runtime = self._runtime_cloud_config()
@@ -369,15 +399,7 @@ class CloudService:
                 port_info = self.printer_manager.get_printer_port_info(printer_name)
                 
                 # 转换capabilities为云端格式
-                raw_capabilities = capabilities
-                cloud_capabilities = {
-                    "paper_sizes": raw_capabilities.get("page_size", ["A4"])[:10],  # 限制数量
-                    "color_support": "RGB" in str(raw_capabilities.get("color_model", [])) or "Color" in str(raw_capabilities.get("color_model", [])),
-                    "duplex_support": any(d != "None" for d in raw_capabilities.get("duplex", ["None"])),
-                    "resolution": self._get_resolution_string(raw_capabilities.get("resolution", ["600dpi"])),
-                    "print_speed": "unknown",
-                    "media_types": raw_capabilities.get("media_type", ["Plain"])[:8]  # 限制数量
-                }
+                cloud_capabilities = self._cloud_printer_capabilities(capabilities)
                 
                 printer_info = {
                     "name": printer_name,
@@ -648,14 +670,7 @@ class CloudService:
                 return {"success": False, "message": "打印机名称不能为空"}
             raw_capabilities = self.printer_manager.get_printer_capabilities(printer_name)
             port_info = self.printer_manager.get_printer_port_info(printer_name)
-            cloud_capabilities = {
-                "paper_sizes": raw_capabilities.get("page_size", ["A4"])[:10],
-                "color_support": bool(raw_capabilities.get("color_supported")),
-                "duplex_support": bool(raw_capabilities.get("duplex_supported")),
-                "resolution": self._get_resolution_string(raw_capabilities.get("resolution", ["600dpi"])),
-                "print_speed": "unknown",
-                "media_types": raw_capabilities.get("media_type", ["Plain"])[:8]
-            }
+            cloud_capabilities = self._cloud_printer_capabilities(raw_capabilities)
             printer_info = {
                 "name": printer_name,
                 "model": managed_printer.get("make_model", ""),
