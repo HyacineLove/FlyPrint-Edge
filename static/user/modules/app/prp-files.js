@@ -6,6 +6,18 @@ const ITEM_KEYS = new Set([
   "id", "name", "media_type", "size", "sha256",
   "created_at", "expires_at", "last_downloaded_at",
 ]);
+const SUPPORTED_MEDIA_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+function fileTypeLabel(mediaType) {
+  if (mediaType === "application/pdf") return "PDF";
+  if (mediaType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "DOCX";
+  return "图片";
+}
 
 export function normalizePRPFilePage(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("文件列表无效");
@@ -18,7 +30,7 @@ export function normalizePRPFilePage(payload) {
         Object.keys(item).some((key) => !ITEM_KEYS.has(key)) ||
         typeof item.id !== "string" || !item.id ||
         typeof item.name !== "string" || !item.name ||
-        item.media_type !== "application/pdf" ||
+        !SUPPORTED_MEDIA_TYPES.has(item.media_type) ||
         !Number.isInteger(item.size) || item.size < 0 ||
         typeof item.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(item.sha256) ||
         Number.isNaN(Date.parse(item.created_at)) || Number.isNaN(Date.parse(item.expires_at)) ||
@@ -49,7 +61,7 @@ export function renderPRPFilesView() {
     <section id="filesPanel" class="files-panel" aria-busy="true">
       <div class="files-panel-heading">
         <div>
-          <h2>PDF 文件</h2>
+          <h2>可打印文件</h2>
           <p id="filesStatus" class="files-status" aria-live="polite">正在读取文件…</p>
         </div>
         <div class="files-panel-actions">
@@ -153,7 +165,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
         row.setAttribute("role", "listitem");
         const badge = document.createElement("span");
         badge.className = "files-item-badge";
-        badge.textContent = "PDF";
+        badge.textContent = fileTypeLabel(item.media_type);
         const summary = document.createElement("span");
         summary.className = "files-item-summary";
         const name = document.createElement("strong");

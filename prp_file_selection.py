@@ -30,7 +30,7 @@ class PRPFileSelectionManager:
         self._validate_id(file_id)
         directory = self._root / session_id
         directory.mkdir(parents=True, exist_ok=True)
-        return directory / f"{file_id}.pdf"
+        return directory / f"{file_id}.source"
 
     def bind(
         self, session_id: str, metadata: Dict[str, Any], source_path: Path

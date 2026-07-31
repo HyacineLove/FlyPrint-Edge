@@ -1085,12 +1085,16 @@ async def select_prp_file(file_id: str, request: Request):
             content={"success": False, "error_code": "portal_session_invalid"},
         )
     destination = None
+    downloaded_source = None
     try:
         destination = prp_file_selection_manager.destination_for(session_id, file_id)
         downloaded = await asyncio.to_thread(
             prp_client.download_file, access_context, file_id, destination
         )
-        public = prp_file_selection_manager.bind(session_id, downloaded, destination)
+        downloaded_source = Path(downloaded["path"])
+        public = prp_file_selection_manager.bind(
+            session_id, downloaded, downloaded_source
+        )
         if not interactive_session_manager.bind_prp_file(session_id, public):
             prp_file_selection_manager.clear_session(session_id)
             return JSONResponse(
@@ -1102,6 +1106,8 @@ async def select_prp_file(file_id: str, request: Request):
         if destination is not None:
             destination.unlink(missing_ok=True)
             Path(str(destination) + ".part").unlink(missing_ok=True)
+        if downloaded_source is not None:
+            downloaded_source.unlink(missing_ok=True)
         code = exc.code if isinstance(exc, PRPClientError) else "invalid_prp_response"
         return JSONResponse(
             status_code=502,

@@ -1,4 +1,6 @@
+import base64
 import hashlib
+import io
 import json
 import tempfile
 import threading
@@ -6,12 +8,33 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+import zipfile
 
 from prp_client import PRPClient, PRPClientError
 
 
 PDF_BYTES = b"%PDF-1.4\nslice-2-edge-client\n%%EOF\n"
 PDF_SHA256 = "4ab35fde902ba92c294658d2f8e10ae15f0200798f4770d73b00d21d4fbd3877"
+PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
+def _docx_bytes():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
+        )
+        archive.writestr(
+            "word/document.xml",
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>',
+        )
+    return buffer.getvalue()
+
+
+DOCX_BYTES = _docx_bytes()
 
 
 class _PRPHandler(BaseHTTPRequestHandler):
@@ -27,11 +50,12 @@ class _PRPHandler(BaseHTTPRequestHandler):
             if type(self).mode == "bad_pagination":
                 body = {"items": [], "page": "1", "page_size": 20, "total": 0}
             else:
+                name, media_type, content = type(self)._file_response()
                 body = {
                     "items": [{
-                        "id": "file-1", "name": "sample.pdf",
-                        "media_type": "application/pdf", "size": len(PDF_BYTES),
-                        "sha256": PDF_SHA256,
+                        "id": "file-1", "name": name,
+                        "media_type": media_type, "size": len(content),
+                        "sha256": hashlib.sha256(content).hexdigest(),
                         "created_at": "2026-07-30T12:00:00Z",
                         "expires_at": "2026-08-06T12:00:00Z",
                         "last_downloaded_at": None,
@@ -43,20 +67,21 @@ class _PRPHandler(BaseHTTPRequestHandler):
             self._json(body)
             return
         if parsed.path == "/api/v1/files/file-1/content":
-            declared_length = len(PDF_BYTES) + (1 if type(self).mode == "wrong_length" else 0)
-            declared_hash = "0" * 64 if type(self).mode == "wrong_hash" else PDF_SHA256
+            name, media_type, content = type(self)._file_response()
+            declared_length = len(content) + (1 if type(self).mode == "wrong_length" else 0)
+            declared_hash = "0" * 64 if type(self).mode == "wrong_hash" else hashlib.sha256(content).hexdigest()
             self.send_response(200)
-            self.send_header("Content-Type", "application/pdf")
+            self.send_header("Content-Type", media_type)
             self.send_header("Content-Length", str(declared_length))
             self.send_header("X-Content-SHA256", declared_hash)
             disposition = (
                 "attachment; filename*=utf-8''Kimi%E5%8F%91%E7%A5%A8.pdf"
                 if type(self).mode == "unicode_filename"
-                else 'attachment; filename="sample.pdf"'
+                else f'attachment; filename="{name}"'
             )
             self.send_header("Content-Disposition", disposition)
             self.end_headers()
-            self.wfile.write(PDF_BYTES)
+            self.wfile.write(content)
             return
         self.send_error(404)
 
@@ -67,6 +92,18 @@ class _PRPHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
+
+    @classmethod
+    def _file_response(cls):
+        if cls.mode == "png":
+            return "sample.png", "image/png", PNG_BYTES
+        if cls.mode == "docx":
+            return (
+                "sample.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                DOCX_BYTES,
+            )
+        return "sample.pdf", "application/pdf", PDF_BYTES
 
     def log_message(self, *_args):
         return
@@ -128,6 +165,30 @@ class PRPClientTests(unittest.TestCase):
             metadata = self.client.download_file(self.access, "file-1", destination)
 
         self.assertEqual("Kimi发票.pdf", metadata["name"])
+
+    def test_list_accepts_supported_image_and_docx_metadata(self):
+        for mode, expected_type in (
+            ("png", "image/png"),
+            ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ):
+            with self.subTest(mode=mode):
+                _PRPHandler.mode = mode
+                result = self.client.list_files(self.access, 1, 20)
+                self.assertEqual(expected_type, result["items"][0]["media_type"])
+
+    def test_download_publishes_with_validated_source_extension(self):
+        for mode, expected_bytes, expected_suffix in (
+            ("png", PNG_BYTES, ".png"),
+            ("docx", DOCX_BYTES, ".docx"),
+        ):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                _PRPHandler.mode = mode
+                destination = Path(directory) / "file-1.source"
+                metadata = self.client.download_file(self.access, "file-1", destination)
+                published = Path(metadata["path"])
+                self.assertEqual(expected_suffix, published.suffix)
+                self.assertEqual(expected_bytes, published.read_bytes())
+                self.assertFalse(destination.exists())
 
     def test_base_url_rejects_userinfo_query_and_fragment(self):
         for base_url in (

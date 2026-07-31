@@ -10,6 +10,7 @@ from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlsplit, urlunsplit
+import zipfile
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -19,6 +20,12 @@ from edge_limits import DEFAULT_MAX_PRP_DOWNLOAD_BYTES
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_MEDIA_EXTENSIONS = {
+    "application/pdf": {".pdf"},
+    "image/png": {".png"},
+    "image/jpeg": {".jpg", ".jpeg"},
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
+}
 
 
 class PRPClientError(RuntimeError):
@@ -108,9 +115,10 @@ class PRPClient:
             if not _SHA256_RE.fullmatch(declared_hash):
                 raise PRPClientError("invalid_prp_response")
             media_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip()
-            if media_type != "application/pdf":
-                raise PRPClientError("unsupported_file_type")
             name = self._download_name(response.headers.get("Content-Disposition", ""))
+            extension = Path(name).suffix.lower()
+            if extension not in _MEDIA_EXTENSIONS.get(media_type, set()):
+                raise PRPClientError("unsupported_file_type")
 
             digest = hashlib.sha256()
             size = 0
@@ -134,14 +142,16 @@ class PRPClient:
                 raise PRPClientError("content_length_mismatch")
             if digest.hexdigest() != declared_hash:
                 raise PRPClientError("content_hash_mismatch")
-            os.replace(partial, destination)
+            self._validate_download_content(partial, media_type)
+            published = destination.with_suffix(extension)
+            os.replace(partial, published)
             return {
                 "id": file_id,
                 "name": name,
                 "media_type": media_type,
                 "size": size,
                 "sha256": declared_hash,
-                "path": str(destination),
+                "path": str(published),
             }
         except PRPClientError:
             partial.unlink(missing_ok=True)
@@ -209,7 +219,8 @@ class PRPClient:
             or not _FILE_ID_RE.fullmatch(item["id"])
             or not isinstance(item["name"], str)
             or not item["name"]
-            or item["media_type"] != "application/pdf"
+            or Path(item["name"]).suffix.lower()
+            not in _MEDIA_EXTENSIONS.get(item["media_type"], set())
             or not isinstance(item["size"], int)
             or isinstance(item["size"], bool)
             or item["size"] < 0
@@ -249,3 +260,34 @@ class PRPClient:
         if not isinstance(name, str) or not name or Path(name).name != name:
             raise PRPClientError("invalid_prp_response")
         return name
+
+    @staticmethod
+    def _validate_download_content(path: Path, media_type: str) -> None:
+        if media_type == "application/pdf":
+            with path.open("rb") as source:
+                signature = source.read(5)
+            if signature != b"%PDF-":
+                raise PRPClientError("unsupported_file_type")
+            return
+        if media_type == "image/png":
+            with path.open("rb") as source:
+                signature = source.read(8)
+            if signature != b"\x89PNG\r\n\x1a\n":
+                raise PRPClientError("unsupported_file_type")
+            return
+        if media_type == "image/jpeg":
+            with path.open("rb") as source:
+                signature = source.read(3)
+            if signature != b"\xff\xd8\xff":
+                raise PRPClientError("unsupported_file_type")
+            return
+        if media_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            try:
+                with zipfile.ZipFile(path) as archive:
+                    names = set(archive.namelist())
+            except (OSError, zipfile.BadZipFile) as exc:
+                raise PRPClientError("unsupported_file_type") from exc
+            if not {"[Content_Types].xml", "word/document.xml"}.issubset(names):
+                raise PRPClientError("unsupported_file_type")
+            return
+        raise PRPClientError("unsupported_file_type")

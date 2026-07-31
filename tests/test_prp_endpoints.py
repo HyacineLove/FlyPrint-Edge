@@ -21,8 +21,9 @@ class _Request:
 
 
 class _FakePRPClient:
-    def __init__(self, fail=False):
+    def __init__(self, fail=False, media_type="application/pdf"):
         self.fail = fail
+        self.media_type = media_type
 
     def list_files(self, _access, page, page_size):
         return {"items": [], "page": page, "page_size": page_size, "total": 0}
@@ -31,10 +32,22 @@ class _FakePRPClient:
         if self.fail:
             Path(str(destination) + ".part").write_bytes(b"partial")
             raise PRPClientError("content_hash_mismatch")
-        destination.write_bytes(b"%PDF-test")
+        suffixes = {
+            "application/pdf": ".pdf",
+            "image/png": ".png",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+        }
+        suffix = suffixes[self.media_type]
+        published = destination.with_suffix(suffix)
+        contents = {
+            ".pdf": b"%PDF-test",
+            ".png": b"\x89PNG\r\n\x1a\n",
+            ".docx": b"PK\x03\x04test",
+        }
+        published.write_bytes(contents[suffix])
         return {
-            "id": file_id, "name": "sample.pdf", "media_type": "application/pdf",
-            "size": 9, "sha256": "0" * 64, "path": str(destination),
+            "id": file_id, "name": "sample" + suffix, "media_type": self.media_type,
+            "size": 9, "sha256": "0" * 64, "path": str(published),
         }
 
 
@@ -75,6 +88,33 @@ class PRPEndpointTests(unittest.TestCase):
             )
         self.assertTrue(response["success"])
         self.assertEqual("prp", self.interactive.build_snapshot()["source_origin"])
+
+    def test_select_binds_downloaded_image_source_path(self):
+        with patch.object(main, "interactive_session_manager", self.interactive), \
+             patch.object(main, "portal_session_manager", self.portal), \
+             patch.object(main, "prp_file_selection_manager", self.selections), \
+             patch.object(main, "prp_client", _FakePRPClient(media_type="image/png")):
+            response = asyncio.run(
+                main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
+            )
+        self.assertTrue(response["success"])
+        snapshot = self.interactive.build_snapshot()
+        self.assertEqual("image/png", snapshot["file_type"])
+        self.assertEqual(".png", self.selections.get_source(self.session_id, "file-1").suffix)
+
+    def test_select_binds_downloaded_docx_source_path(self):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        with patch.object(main, "interactive_session_manager", self.interactive), \
+             patch.object(main, "portal_session_manager", self.portal), \
+             patch.object(main, "prp_file_selection_manager", self.selections), \
+             patch.object(main, "prp_client", _FakePRPClient(media_type=media_type)):
+            response = asyncio.run(
+                main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
+            )
+        self.assertTrue(response["success"])
+        snapshot = self.interactive.build_snapshot()
+        self.assertEqual(media_type, snapshot["file_type"])
+        self.assertEqual(".docx", self.selections.get_source(self.session_id, "file-1").suffix)
 
     def test_select_failure_keeps_identity_ready_and_deletes_partial_source(self):
         self.interactive.bind_portal_identity({
