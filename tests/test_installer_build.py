@@ -33,8 +33,9 @@ class PyInstallerSpecTests(unittest.TestCase):
         self.assertNotIn("mfc140u", spec_text)
         self.assertIn("fitz", spec_text)
         self.assertIn("static", spec_text)
-        self.assertIn("ipp-printing-architecture.md", spec_text)
-        self.assertIn("ipp-printing-operations.md", spec_text)
+        self.assertIn('"docs" / "agent"', spec_text)
+        self.assertIn("architecture-and-protocols.md", spec_text)
+        self.assertIn("development-and-verification.md", spec_text)
         self.assertIn("COLLECT(", spec_text)
         self.assertIn('"tests"', spec_text)
         self.assertNotIn("launch.vbs", spec_text)
@@ -71,6 +72,11 @@ class PyInstallerBuildOutputTests(unittest.TestCase):
     def test_config_example_bundled(self):
         config_in_internal = DIST_EXE_DIR / "_internal" / "config.example.json"
         self.assertTrue(config_in_internal.is_file())
+
+    def test_current_edge_documents_bundled(self):
+        docs_in_internal = DIST_EXE_DIR / "_internal" / "docs"
+        self.assertTrue((docs_in_internal / "architecture-and-protocols.md").is_file())
+        self.assertTrue((docs_in_internal / "development-and-verification.md").is_file())
 
 
 class InnoSetupScriptTests(unittest.TestCase):

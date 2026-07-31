@@ -66,8 +66,8 @@ config_example = PROJECT_ROOT / "config.example.json"
 if config_example.is_file():
     datas.append((str(config_example), "."))
 
-for document_name in ("ipp-printing-architecture.md", "ipp-printing-operations.md"):
-    document_path = PROJECT_ROOT / "docs" / document_name
+for document_name in ("architecture-and-protocols.md", "development-and-verification.md"):
+    document_path = PROJECT_ROOT / "docs" / "agent" / document_name
     if document_path.is_file():
         datas.append((str(document_path), "docs"))
 
