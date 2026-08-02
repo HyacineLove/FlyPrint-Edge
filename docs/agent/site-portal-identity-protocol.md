@@ -1,5 +1,7 @@
 # Site Portal 身份会话协议
 
+> **协议权威在 cloud 侧** `fly-print-cloud/docs/agent/site-portal-identity-protocol.md`（完整时序与接口契约）；本文件只记录 **Edge 消费边界**，协议变更时以 cloud 侧为准并同步本文件。
+
 本协议描述 PDF 检查点中 Site Portal 身份到 Edge 的边界。
 
 - Cloud WebSocket 只通知 Edge 一次性领取所需的公开上下文，不携带 PRP Token。
