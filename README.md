@@ -22,18 +22,9 @@ FlyPrint Edge 是部署在校园一体机上的打印客户端（Windows）。�
 | `tests/` | 分层测试：`unit/` `contract/` `e2e/`（规则见 `tests/README.md`） |
 | `release/` | 安装包构建脚本（`build_installer.py`） |
 
-## 文档导航（按需加载，勿整仓通读）
+## 文档导航
 
-| 任务 | 文档 |
-|------|------|
-| **全局计划（先读）** | 工作区根 `../FlyPrint总开发计划.md`、`../FlyPrint开发任务清单.md` |
-| IPP 架构、协议、打印链路与安全边界 | `docs/agent/architecture-and-protocols.md` |
-| IPP 环境、部署、排障、构建与验收 | `docs/agent/development-and-verification.md` |
-| PRP 文件协议 | `docs/agent/prp-file-protocol.md` |
-| Site Portal 身份协议（Edge 消费边界） | `docs/agent/site-portal-identity-protocol.md` |
-| 测试分层与新建测试规则 | `tests/README.md` |
-| Cloud 侧协议权威（provider 端） | 同级 `../fly-print-cloud/docs/agent/architecture-and-protocols.md` |
-| Agent 硬规则 | `AGENTS.md` |
+Agent 路由（任务 → 文档的精确映射）、硬规则与交付收口见 **`AGENTS.md`**；全局计划与跨仓库文档见工作区根 **`README.md`**。本仓库技术协议见 `docs/agent/`（`site-portal-identity-protocol.md` 的完整权威在 cloud 侧）。
 
 ## 开发与测试
 
