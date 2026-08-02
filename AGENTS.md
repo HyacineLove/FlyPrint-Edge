@@ -23,4 +23,4 @@
 - 保持模块职责清晰，避免继续堆 `main.py`、Cloud 适配层或单一模块。
 - 保留工作区已有改动；提交前检查 `git status --short`，并同步更新受影响说明。
 - **完成态**：`[x]` 仅表示已合入（及该项验收所要求的打包/预演）；「代码/单测通过」最多 `[~]`。细则见根目录 `../FlyPrint开发任务清单.md`「用法」第 4 条。
-- **交付收口**：本轮 Edge 有改动时，全部改完后 bump 版本并重新 build 安装包（`release/build_installer.py`）。Cloud 侧改动用 `docker compose up --build -d`，不打 Edge 包。详见工作区 `.cursor/rules/delivery-artifacts.mdc`。
+- **交付收口**：本轮 Edge 有改动时，全部改完后 bump 版本并重新 build 安装包：`.\.venv-build-3.12.10\Scripts\python.exe release/build_installer.py --version <新版本>`，产物 `dist/flyprint-edge-setup-<版本>.exe`（不入库）。Cloud 侧改动用 `docker compose up --build -d`，不打 Edge 包。双仓同改时：Cloud 先 `compose up --build`，Edge 整轮收尾再打安装包。
