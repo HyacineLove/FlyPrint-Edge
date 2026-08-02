@@ -19,7 +19,7 @@ FlyPrint Edge 是部署在校园一体机上的打印客户端（Windows）。�
 | `job_delivery_store.py` | SQLite 持久化投递状态（inbox/outbox，权威状态） |
 | `interactive_session.py` | 交互会话（预览/打印确认/快照恢复） |
 | `portal_*.py` / `prp_*.py` / `site_portal_client.py` | Site Portal 身份领取与 PRP 文件客户端 |
-| `tests/` | 分层测试：`unit/` `contract/` `e2e/`（规则见 `tests/README.md`） |
+| `tests/` | 分层测试：`unit/` `contract/` `e2e/`（规则见 `docs/TESTING.md`） |
 | `release/` | 安装包构建脚本（`build_installer.py`） |
 
 ## 文档导航
