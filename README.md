@@ -7,7 +7,7 @@ FlyPrint Edge 是部署在校园一体机上的打印客户端（Windows）。�
 | 组件 | 位置 | 关系 |
 |------|------|------|
 | FlyPrint Cloud | 同级目录 `../fly-print-cloud/`（独立 Git 仓库） | 云端控制面：认证、终端会话、用户映射、额度、任务审计；Edge 通过 REST + WebSocket 与其通信 |
-| 历史归档 | 工作区外 `../FlyPrint-archive/` | 默认不读，不参与当前范围与完成判定 |
+| 历史归档 | 工作区外 `../../FlyPrint-archive/` | 默认不读，不参与当前范围与完成判定 |
 
 ## 目录
 
