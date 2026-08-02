@@ -11,7 +11,7 @@ These tests validate:
 import unittest
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SPEC_FILE = PROJECT_ROOT / "flyprint-edge.spec"
 ISS_FILE = PROJECT_ROOT / "installer.iss"
 DIST_EXE_DIR = PROJECT_ROOT / "dist" / "flyprint-edge"

@@ -6,7 +6,7 @@ import time
 import unittest
 from unittest.mock import Mock
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from job_delivery_store import JobDeliveryStore
 from cloud_websocket_client import CloudWebSocketClient
 

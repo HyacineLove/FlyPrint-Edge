@@ -11,6 +11,7 @@
 | IPP 环境、部署、排障、构建与验收 | `docs/agent/development-and-verification.md` |
 | PRP 文件协议 | `docs/agent/prp-file-protocol.md` |
 | Site Portal 身份协议 | `docs/agent/site-portal-identity-protocol.md` |
+| 测试组织规则（新建测试先读） | `tests/README.md` |
 | 历史归档 | `../FlyPrint-archive/README.md`（工作区外，默认不读，不参与完成判定） |
 
 工作区外 `../FlyPrint-archive/` **默认不读、不参与范围与完成判定**；仅在当前任务明确需要历史资料时再按需查阅。旧私有域口径见 `../FlyPrint-archive/workspace/superseded-private-domain-2026-07-30/`。

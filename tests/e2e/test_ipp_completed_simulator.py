@@ -5,7 +5,7 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer
 
 from printing.ipp_protocol import IppClient, TAG_INTEGER
-from tests.ipp_completed_simulator import CompletedIppHandler
+from ipp_completed_simulator import CompletedIppHandler
 
 
 class CompletedIppSimulatorTests(unittest.TestCase):
