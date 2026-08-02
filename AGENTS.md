@@ -4,12 +4,14 @@
 
 | 任务 | 文档 |
 |------|------|
-| **全局计划 / 当前任务（先读）** | `../FlyPrint总开发计划.md`、`../FlyPrint开发任务清单.md`（本阶段唯一主文档，无 `/Auth`） |
-| 差距对照 / 定稿数据流 | `../docs/私有域接入-现状与目标差距清单.md`、`../docs/diagrams/refactoring-change-map.drawio.png` |
-| 现状基线 | `../docs/现状系统说明.md`、`../docs/diagrams/current-dataflow.drawio.png` |
+| **全局计划 / 当前任务（先读）** | `../FlyPrint总开发计划.md`、`../FlyPrint开发任务清单.md`（本阶段唯一主文档） |
+| 差距对照 / 定稿数据流 | `../docs/02-私有域接入-现状与目标差距清单.md`、`../docs/diagrams/refactoring-change-map.drawio.png` |
+| 现状基线 | `../docs/01-现状系统说明.md`、`../docs/diagrams/current-dataflow.drawio.png` |
 | IPP 架构、协议、打印链路与安全边界 | `docs/agent/architecture-and-protocols.md` |
 | IPP 环境、部署、排障、构建与验收 | `docs/agent/development-and-verification.md` |
-| http(s)/ws(s) 双兼容实现 | `url_scheme.py`、`cloud_api_client.get_websocket_url`；规则见架构文档「二维码、会话与安全边界」 |
+| PRP 文件协议 | `docs/agent/prp-file-protocol.md` |
+| Site Portal 身份协议 | `docs/agent/site-portal-identity-protocol.md` |
+| 历史归档 | `../archive/README.md`（默认不读，不参与完成判定） |
 
 根目录 `archive/` **默认不读、不参与范围与完成判定**；仅在当前任务明确需要历史资料时再按需查阅。旧私有域口径见 `../archive/workspace/superseded-private-domain-2026-07-30/`。
 
