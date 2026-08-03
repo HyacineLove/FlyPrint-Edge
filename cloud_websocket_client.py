@@ -11,6 +11,9 @@ import threading
 import time
 import logging
 import requests
+
+# 单次 Cloud 打印文件下载字节上限（与打印文件尺寸上限一致，防止异常文件写满磁盘）
+MAX_CLOUD_DOWNLOAD_BYTES = 200 * 1024 * 1024
 import os
 import base64
 import shutil
@@ -1084,9 +1087,21 @@ class PrintJobHandler:
                     pass
 
                 try:
+                    # 与 prp_client 一致：校验 Content-Length 与累计字节上限，防止异常文件写满磁盘
+                    length_header = response.headers.get("Content-Length")
+                    if length_header:
+                        try:
+                            if int(length_header) > MAX_CLOUD_DOWNLOAD_BYTES:
+                                raise RuntimeError(f"print file Content-Length {length_header} exceeds limit {MAX_CLOUD_DOWNLOAD_BYTES}")
+                        except (ValueError, TypeError):
+                            pass
                     with open(partial_path, "wb") as f:
+                        downloaded = 0
                         for chunk in response.iter_content(chunk_size=1024 * 1024):
                             if chunk:
+                                downloaded += len(chunk)
+                                if downloaded > MAX_CLOUD_DOWNLOAD_BYTES:
+                                    raise RuntimeError(f"print file exceeds size limit {MAX_CLOUD_DOWNLOAD_BYTES}")
                                 f.write(chunk)
                     os.replace(partial_path, temp_file_path)
                 finally:

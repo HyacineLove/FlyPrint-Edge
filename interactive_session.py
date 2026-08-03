@@ -258,14 +258,22 @@ class InteractiveSessionManager:
         if not file_id or not file_url:
             return None
 
-        if data.get("integration_request_id") and not self.bind_integration_request(data):
-            return None
-
         with self._lock:
             if not self._active_session:
                 return None
             if not self._matches_terminal_context(data):
                 return None
+
+            # integration 绑定并入同一锁内执行，避免与上下文校验之间的 TOCTOU
+            request_id = data.get("integration_request_id")
+            if request_id:
+                current = self._active_session.get("integration_request_id")
+                if current and current != request_id:
+                    return None
+                if not self._active_session.get("terminal_ticket_hash"):
+                    self._active_session["terminal_ticket_hash"] = data.get("terminal_ticket_hash")
+                self._active_session["integration_request_id"] = request_id
+                self._active_session["entry_type"] = "integration"
 
             current_file_id = self._active_session.get("file_id")
             if current_file_id and current_file_id != file_id:

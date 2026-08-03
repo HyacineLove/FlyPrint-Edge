@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+
+# 终态报告最大重试次数（约 30 分钟：2^6=60s 封顶后 50 次）；超限置 rejected 停止重发
+MAX_TERMINAL_REPORT_ATTEMPTS = 50
 import time
 import uuid
 from contextlib import contextmanager
@@ -102,6 +105,13 @@ class JobDeliveryStore:
             if not row:
                 return
             attempts = int(row[0]) + 1
+            # 达到上限后停止重发并标记 rejected，避免 outbox 无限增长与重发流量无收敛
+            if attempts > MAX_TERMINAL_REPORT_ATTEMPTS:
+                db.execute(
+                    "UPDATE terminal_job_report_outbox SET state='rejected',last_error=?,updated_at=? WHERE event_id=? AND state='pending'",
+                    (f"max_attempts_reached:{error}", time.time(), event_id),
+                )
+                return
             delay = min(60.0, float(2 ** min(attempts - 1, 6)))
             db.execute("UPDATE terminal_job_report_outbox SET attempt_count=?,next_attempt_at=?,last_error=?,updated_at=? WHERE event_id=?", (attempts, time.time() + delay, error, time.time(), event_id))
 

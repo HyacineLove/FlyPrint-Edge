@@ -46,7 +46,7 @@ from windows_startup import get_windows_startup_enabled, set_windows_startup_ena
 from print_layout import resolve_layout_options
 from print_options import normalize_print_options, to_cloud_duplex
 from print_runtime import build_document_pipeline, build_print_service, stop_document_pipelines
-from portal_print_service import PortalPrintService
+from portal_print_service import PortalPrintService, shutdown_portal_executor
 from printing.documents import DocumentIdentity
 from printing.domain import ErrorCode, PrintError, PrintOptions
 
@@ -416,6 +416,7 @@ async def shutdown_event():
     if active:
         prp_file_selection_manager.clear_session(active["session_id"])
     portal_session_manager.clear()
+    shutdown_portal_executor()
     
     # 停止文件管理器
     file_mgr = get_file_manager()

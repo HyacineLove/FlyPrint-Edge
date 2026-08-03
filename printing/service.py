@@ -115,7 +115,11 @@ class IppPrintService:
             try:
                 response = client.print_pdf(prepared.print_pdf, request.unique_document_name, request.source_name, job_attributes)
             except IppTransportError as exc:
-                raise PrintError(ErrorCode.IPP_SUBMISSION_UNCONFIRMED, str(exc), state=PrintState.UNCONFIRMED) from exc
+                if getattr(exc, "request_sent", True):
+                    # 请求已发出但无有效响应：任务可能已提交，保持 UNCONFIRMED（不自动重打）
+                    raise PrintError(ErrorCode.IPP_SUBMISSION_UNCONFIRMED, str(exc), state=PrintState.UNCONFIRMED) from exc
+                # 连接建立/请求发出前即失败：任务未提交到设备，不应锁死设备
+                raise PrintError(ErrorCode.IPP_SUBMISSION_FAILED, str(exc)) from exc
             except IppResponseError as exc:
                 raise PrintError(ErrorCode.IPP_SUBMISSION_FAILED, str(exc)) from exc
             device_job_id = int(response.first("job-id", 0) or 0)

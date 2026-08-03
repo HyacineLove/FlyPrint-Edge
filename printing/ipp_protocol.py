@@ -61,7 +61,10 @@ class IppUriError(IppError):
 
 
 class IppTransportError(IppError):
-    pass
+    def __init__(self, message: str, request_sent: bool = True):
+        super().__init__(message)
+        # request_sent=False 表示连接建立/请求发出前即失败（任务未提交到设备）
+        self.request_sent = request_sent
 
 
 class IppResponseError(IppError):
@@ -252,6 +255,7 @@ class IppClient:
     def _send(self, operation: int, request_id: int, prefix: bytes, document_path: Path | None = None) -> IppResponse:
         document_size = document_path.stat().st_size if document_path else 0
         connection = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
+        request_sent = False
         try:
             connection.putrequest("POST", self.path)
             connection.putheader("Content-Type", "application/ipp")
@@ -259,6 +263,7 @@ class IppClient:
             connection.putheader("Content-Length", str(len(prefix) + document_size))
             connection.endheaders()
             connection.send(prefix)
+            request_sent = True
             if document_path:
                 with document_path.open("rb") as stream:
                     for chunk in iter(lambda: stream.read(CHUNK_SIZE), b""):
@@ -273,7 +278,11 @@ class IppClient:
             if content_type != "application/ipp":
                 raise IppTransportError(f"IPP HTTP response had unexpected Content-Type {content_type!r}")
         except (OSError, TimeoutError, http.client.HTTPException) as exc:
-            raise IppTransportError(f"IPP transport failed for {self.printer_uri}: {exc}") from exc
+            detail = f"{self.printer_uri}: {exc}"
+            if request_sent:
+                # 请求字节已发出但未取得有效响应：任务可能已提交，归为 UNCONFIRMED
+                raise IppTransportError(f"IPP request sent but no valid response for {detail}", request_sent=True) from exc
+            raise IppTransportError(f"IPP transport failed before request sent for {detail}", request_sent=False) from exc
         finally:
             connection.close()
         response = parse_response(raw)

@@ -20,6 +20,11 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="portal-print")
 _CONFIRMATION_NAMESPACE = uuid.UUID("52e4c294-8804-4fd2-9109-d10bcf274407")
 
 
+def shutdown_portal_executor() -> None:
+    """进程退出时优雅关闭 portal 打印执行器（取消未启动的排队任务）。"""
+    _EXECUTOR.shutdown(wait=False, cancel_futures=True)
+
+
 class PortalPrintService:
     def __init__(
         self,
@@ -83,7 +88,22 @@ class PortalPrintService:
 
         job_id = str(authorization.get("job_id") or "")
         if not self.session_manager.attach_authorized_job(session_id, file_id, job_id):
-            raise RuntimeError("authorized job could not bind to the active session")
+            # Cloud 已分配 job_id 并预留额度：不能静默悬空。上报 failed 并复位会话，
+            # 避免 Cloud 侧任务永久挂起、额度永久扣留。
+            self.terminal_reporter.queue_terminal_job_update(
+                job_id,
+                "failed",
+                {
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error_code": "job_bind_failed",
+                    "error_message": "授权任务未能绑定当前会话",
+                },
+            )
+            self.session_manager.reject_print_submission(
+                session_id, file_id, "job_bind_failed", "授权任务未能绑定当前会话"
+            )
+            return {"success": False, "error_code": "job_bind_failed", "message": "授权任务未能绑定当前会话"}
 
         def cache_miss():
             raise PrintError(

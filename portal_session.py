@@ -67,6 +67,11 @@ class PortalSessionManager:
         with self._lock:
             if not self._active:
                 return {"active": False}
+            expires_at = _parse_utc_timestamp(self._active.get("access_token_expires_at"))
+            if not expires_at or expires_at <= datetime.now(timezone.utc):
+                # 凭证已过期：与 get_access_context 一致地清空会话，避免 UI 显示已登录而实际不可用
+                self._active = None
+                return {"active": False}
             return {
                 "active": True,
                 "terminal_session_id": self._active["terminal_session_id"],

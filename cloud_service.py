@@ -178,6 +178,7 @@ class CloudService:
                 auth_url=runtime["auth_url"],
                 client_id=runtime["client_id"],
                 client_secret=runtime["client_secret"],
+                verify_ssl=bool(runtime.get("verify_ssl", True)),
             )
             self.api_client = CloudAPIClient(
                 base_url=runtime["base_url"],

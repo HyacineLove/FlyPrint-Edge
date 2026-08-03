@@ -84,8 +84,11 @@ class PRPFileSelectionManager:
             if not selection or selection["file_id"] != file_id:
                 return False
             del self._selections[session_id]
-            self._remove_empty_parent(Path(selection["source_path"]).parent)
-            return True
+            source = Path(selection["source_path"])
+        # 锁外删除源文件（含 .part），幂等：预览流程已删除时 missing_ok 安全。
+        # 修复预览中途出错时 .source 残留磁盘的问题。
+        self._delete_source(source)
+        return True
 
     def clear_session(self, session_id: str) -> bool:
         with self._lock:

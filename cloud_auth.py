@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 class CloudAuthClient:
     """云端OAuth2认证客户端"""
     
-    def __init__(self, auth_url: str, client_id: str, client_secret: str):
+    def __init__(self, auth_url: str, client_id: str, client_secret: str, verify_ssl: bool = True):
         self.auth_url = auth_url
         self.client_id = client_id
         self.client_secret = client_secret
+        self.verify_ssl = verify_ssl
         self.access_token = None
         self.token_expires_at = None
         
@@ -49,11 +50,12 @@ class CloudAuthClient:
                 'scope': 'edge:register edge:printer edge:heartbeat'
             }
             
-            # verify=False 允许自签名证书
+            # 默认校验证书；仅自签名 Demo 环境经 config 显式关闭
             response = requests.post(
                 self.auth_url,
                 data=data,
                 headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                verify=self.verify_ssl,
                 timeout=10
             )
             
