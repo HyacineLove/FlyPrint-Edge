@@ -255,6 +255,19 @@ class LauncherApp:
             creationflags=self._service_creation_flags(),
         )
 
+    def _service_process_running(self) -> bool:
+        """服务进程（exe 路径或 cmdline 匹配）是否已在运行。"""
+        service_path = str(self.service_exe.resolve()).lower()
+        for process in psutil.process_iter(["pid", "exe", "cmdline"]):
+            try:
+                exe_path = (process.info.get("exe") or "").lower()
+                cmdline = [str(item).lower() for item in (process.info.get("cmdline") or [])]
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+            if exe_path == service_path or service_path in cmdline:
+                return True
+        return False
+
     def _terminate_service_processes(self) -> None:
         service_path = str(self.service_exe.resolve()).lower()
         matched_processes: list[psutil.Process] = []
@@ -322,6 +335,15 @@ class LauncherApp:
 
         if not restart and is_service_ready(self.base_url):
             return
+
+        # 服务进程已在运行（HTTP 未就绪）时不重复拉起，等待就绪即可
+        if not restart and self._service_process_running():
+            deadline = time.monotonic() + SERVICE_READY_TIMEOUT_SEC
+            while time.monotonic() < deadline:
+                if is_service_ready(self.base_url):
+                    return
+                time.sleep(SERVICE_POLL_INTERVAL_SEC)
+            raise RuntimeError("FlyPrint service did not become ready in time")
 
         self._start_service_process()
         deadline = time.monotonic() + SERVICE_READY_TIMEOUT_SEC
