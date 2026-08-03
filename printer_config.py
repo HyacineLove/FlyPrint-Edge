@@ -7,6 +7,7 @@ import json
 import uuid
 import os
 import logging
+import threading
 from copy import deepcopy
 from datetime import datetime
 from typing import List, Dict
@@ -18,6 +19,9 @@ from edge_limits import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 跨写方（admin 保存、ops_contacts 线程、activate/reconfigure）共享的配置文件写锁
+_config_write_lock = threading.Lock()
 
 class PrinterConfig:
     """打印机配置管理"""
@@ -43,104 +47,110 @@ class PrinterConfig:
             logger.debug("Loading config file: %s", self.config_file)
             with open(self.config_file, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
-                config_updated = self._migrate_printer_schema(config)
-                if "default_printer_id" not in config:
-                    config["default_printer_id"] = None
+            # 读句柄随 with 退出关闭；后续 os.replace 需要 DELETE 共享
+            config_updated = self._migrate_printer_schema(config)
+            if "default_printer_id" not in config:
+                config["default_printer_id"] = None
                 
-                # 初始化网络配置
-                if "network" not in config:
-                    config["network"] = {
-                        "bind_address": "127.0.0.1",
-                        "port": 7860
-                    }
+            # 初始化网络配置
+            if "network" not in config:
+                config["network"] = {
+                    "bind_address": "127.0.0.1",
+                    "port": 7860
+                }
                 
-                if "cloud" in config:
-                    config["cloud"].pop("enabled", None)
-                    config["cloud"].pop("auto_register", None)
-                    # Credentials are no longer accepted from or written to
-                    # config.json. Activation stores the device-only bundle in
-                    # a Windows DPAPI ciphertext instead.
-                    for key in ("auth_url", "client_id", "client_secret"):
-                        if key in config["cloud"]:
-                            config["cloud"].pop(key, None)
-                            config_updated = True
-                    config["cloud"].setdefault("credential_blob", "")
-                    config["cloud"].setdefault("profile_pending", False)
+            if "cloud" in config:
+                config["cloud"].pop("enabled", None)
+                config["cloud"].pop("auto_register", None)
+                # Credentials are no longer accepted from or written to
+                # config.json. Activation stores the device-only bundle in
+                # a Windows DPAPI ciphertext instead.
+                for key in ("auth_url", "client_id", "client_secret"):
+                    if key in config["cloud"]:
+                        config["cloud"].pop(key, None)
+                        config_updated = True
+                config["cloud"].setdefault("credential_blob", "")
+                config["cloud"].setdefault("profile_pending", False)
 
-                # (已移除环境变量读取逻辑，完全依赖 config.json)
+            # (已移除环境变量读取逻辑，完全依赖 config.json)
                 
-                settings = config.setdefault("settings", {})
-                for removed_key in ("pdf_printer_path", "sumatra_path"):
-                    if removed_key in settings:
-                        settings.pop(removed_key, None)
-                        config_updated = True
-                if "copies_min" not in settings:
-                    settings["copies_min"] = 1
+            settings = config.setdefault("settings", {})
+            for removed_key in ("pdf_printer_path", "sumatra_path"):
+                if removed_key in settings:
+                    settings.pop(removed_key, None)
                     config_updated = True
-                if "copies_max" not in settings:
-                    settings["copies_max"] = 3
+            if "copies_min" not in settings:
+                settings["copies_min"] = 1
+                config_updated = True
+            if "copies_max" not in settings:
+                settings["copies_max"] = 3
+                config_updated = True
+            for key, default in {
+                "max_file_size_bytes": DEFAULT_MAX_FILE_SIZE_BYTES,
+                "max_document_pages": DEFAULT_MAX_DOCUMENT_PAGES,
+                "max_list_items": DEFAULT_MAX_LIST_ITEMS,
+            }.items():
+                if key not in settings:
+                    settings[key] = default
                     config_updated = True
-                for key, default in {
-                    "max_file_size_bytes": DEFAULT_MAX_FILE_SIZE_BYTES,
-                    "max_document_pages": DEFAULT_MAX_DOCUMENT_PAGES,
-                    "max_list_items": DEFAULT_MAX_LIST_ITEMS,
-                }.items():
-                    if key not in settings:
-                        settings[key] = default
-                        config_updated = True
-                if "log_level" not in settings:
-                    settings["log_level"] = "INFO"
+            if "log_level" not in settings:
+                settings["log_level"] = "INFO"
+                config_updated = True
+            if "debug_logging" not in settings:
+                settings["debug_logging"] = False
+                config_updated = True
+            if "ops_contacts" not in settings:
+                settings["ops_contacts"] = []
+                config_updated = True
+            for printer in config.get("managed_printers", []):
+                if "enabled" not in printer:
+                    printer["enabled"] = True
                     config_updated = True
-                if "debug_logging" not in settings:
-                    settings["debug_logging"] = False
+                if "cloud_registered" not in printer:
+                    printer["cloud_registered"] = False
                     config_updated = True
-                if "ops_contacts" not in settings:
-                    settings["ops_contacts"] = []
-                    config_updated = True
-                for printer in config.get("managed_printers", []):
-                    if "enabled" not in printer:
-                        printer["enabled"] = True
-                        config_updated = True
-                    if "cloud_registered" not in printer:
-                        printer["cloud_registered"] = False
-                        config_updated = True
-                if config_updated:
-                    with open(self.config_file, 'w', encoding='utf-8') as wf:
+            if config_updated:
+                with _config_write_lock:
+                    temporary = f"{self.config_file}.tmp"
+                    with open(temporary, 'w', encoding='utf-8') as wf:
                         json.dump(config, wf, indent=4, ensure_ascii=False)
-                logger.debug(
-                    "Config loaded: file=%s managed_printers=%s",
-                    self.config_file,
-                    len(config.get("managed_printers", [])),
-                )
-                return config
+                        wf.flush()
+                        os.fsync(wf.fileno())
+                    os.replace(temporary, self.config_file)
+            logger.debug(
+                "Config loaded: file=%s managed_printers=%s",
+                self.config_file,
+                len(config.get("managed_printers", [])),
+            )
+            return config
         except FileNotFoundError:
             logger.warning("Config file missing, creating default config: %s", self.config_file)
             default_config = {
-                "printer_schema_version": 2,
-                "managed_printers": [], 
-                "settings": {
-                    "copies_min": 1,
-                    "copies_max": 3,
-                    "max_file_size_bytes": DEFAULT_MAX_FILE_SIZE_BYTES,
-                    "max_document_pages": DEFAULT_MAX_DOCUMENT_PAGES,
-                    "max_list_items": DEFAULT_MAX_LIST_ITEMS,
-                    "log_level": "INFO",
-                    "debug_logging": False,
-                    "ops_contacts": [],
-                },
-                "network": {
-                    "bind_address": "127.0.0.1",
-                    "port": 7860
-                },
-                "cloud": {
-                    "base_url": "",
-                    "credential_blob": "",
-                    "profile_pending": False,
-                    "node_name": "",
-                    "location": "",
-                    "heartbeat_interval": 30
-                },
-                "default_printer_id": None
+            "printer_schema_version": 2,
+            "managed_printers": [], 
+            "settings": {
+                "copies_min": 1,
+                "copies_max": 3,
+                "max_file_size_bytes": DEFAULT_MAX_FILE_SIZE_BYTES,
+                "max_document_pages": DEFAULT_MAX_DOCUMENT_PAGES,
+                "max_list_items": DEFAULT_MAX_LIST_ITEMS,
+                "log_level": "INFO",
+                "debug_logging": False,
+                "ops_contacts": [],
+            },
+            "network": {
+                "bind_address": "127.0.0.1",
+                "port": 7860
+            },
+            "cloud": {
+                "base_url": "",
+                "credential_blob": "",
+                "profile_pending": False,
+                "node_name": "",
+                "location": "",
+                "heartbeat_interval": 30
+            },
+            "default_printer_id": None
             }
             # 立即保存默认配置到文件
             self.config = default_config
@@ -148,10 +158,15 @@ class PrinterConfig:
             return default_config
     
     def save_config(self):
-        """保存配置文件"""
+        """保存配置文件：进程内锁 + 原子写（tmp + fsync + rename），防并发写坏。"""
         logger.debug("Saving config file: %s", self.config_file)
-        with open(self.config_file, 'w', encoding='utf-8') as f:
-            json.dump(self.config, f, indent=4, ensure_ascii=False)
+        with _config_write_lock:
+            temporary = f"{self.config_file}.tmp"
+            with open(temporary, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=4, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, self.config_file)
         logger.debug("Config file saved: %s", self.config_file)
 
     def get_full_config(self) -> Dict:
