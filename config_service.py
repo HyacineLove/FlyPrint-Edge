@@ -188,23 +188,32 @@ class ConfigService:
             return {"success": False, "saved": False, "errors": errors}
 
         changes = self.classify_changes(current, merged)
-        self.config_repo.replace_full_config(merged)
 
+        # Cloud 配置预检必须在落盘前：无效配置不写盘，避免磁盘/运行时状态分叉
         cloud_reconnected = False
         warnings: List[str] = []
         if changes["cloud_changed"] and cloud_service:
             preflight = self.test_cloud_connection({"cloud": merged.get("cloud", {})})
             if not preflight.get("success"):
-                warnings.append(preflight.get("message") or "cloud configuration test failed")
-            else:
-                result = cloud_service.reconfigure(merged.get("cloud", {}), preserve_node_id=True)
-                cloud_reconnected = bool(result.get("connected"))
-                if not result.get("success"):
-                    warnings.append(result.get("message") or "cloud reconfigure failed")
-                elif result.get("registered") is False:
-                    warnings.append("\u4e91\u7aef\u914d\u7f6e\u5df2\u5e94\u7528\uff0c\u8bf7\u6267\u884c\u201c\u68c0\u6d4b\u8fde\u63a5\u5e76\u6ce8\u518c\u8282\u70b9\u201d\u5b8c\u6210\u8bbe\u7f6e")
-                elif not cloud_reconnected:
-                    warnings.append(result.get("message") or "\u4e91\u7aef\u8fd0\u884c\u65f6\u5df2\u91cd\u8f7d")
+                return {
+                    "success": False,
+                    "saved": False,
+                    "errors": [preflight.get("message") or "cloud configuration test failed"],
+                }
+
+        self.config_repo.replace_full_config(merged)
+
+        if changes["cloud_changed"] and cloud_service:
+            result = cloud_service.reconfigure(merged.get("cloud", {}), preserve_node_id=True)
+            cloud_reconnected = bool(result.get("connected"))
+            if not result.get("success"):
+                # 运行时应用失败：回滚磁盘配置到变更前
+                self.config_repo.replace_full_config(current)
+                warnings.append(result.get("message") or "cloud reconfigure failed")
+            elif result.get("registered") is False:
+                warnings.append("\u4e91\u7aef\u914d\u7f6e\u5df2\u5e94\u7528\uff0c\u8bf7\u6267\u884c\u201c\u68c0\u6d4b\u8fde\u63a5\u5e76\u6ce8\u518c\u8282\u70b9\u201d\u5b8c\u6210\u8bbe\u7f6e")
+            elif not cloud_reconnected:
+                warnings.append(result.get("message") or "\u4e91\u7aef\u8fd0\u884c\u65f6\u5df2\u91cd\u8f7d")
 
         return {
             "success": True,
