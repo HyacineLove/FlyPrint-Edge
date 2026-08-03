@@ -1483,7 +1483,8 @@ async def save_admin_config(request: Request):
     body = await request.json()
     try:
         service = _get_config_service()
-        result = service.save_and_apply(body, cloud_service=cloud_service)
+        # save_and_apply 含网络测试与线程 join，必须移出事件循环
+        result = await asyncio.to_thread(service.save_and_apply, body, cloud_service=cloud_service)
         if cloud_service:
             node_id = cloud_service.node_id
         status_code = 200 if result.get("success") else 400
