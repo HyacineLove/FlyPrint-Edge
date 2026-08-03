@@ -659,14 +659,15 @@ class CloudService:
             if not printer_name:
                 return {"success": False, "message": "打印机名称不能为空"}
             
-            # 获取打印机状态和能力
+            # 获取打印机状态和能力（能力统一走归一化，与 register_managed_printer 一致）
             status = self.printer_manager.get_printer_status(printer_name)
-            capabilities = self.printer_manager.get_printer_capabilities(printer_name)
-            
+            raw_capabilities = self.printer_manager.get_printer_capabilities(printer_name)
+            cloud_capabilities = self._cloud_printer_capabilities(raw_capabilities)
+
             enhanced_info = {
                 **printer_info,
                 "status": status,
-                "capabilities": capabilities
+                "capabilities": cloud_capabilities,
             }
             
             result = self.api_client.register_printers([enhanced_info])
