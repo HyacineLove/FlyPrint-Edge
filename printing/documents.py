@@ -285,6 +285,23 @@ class DocumentPipeline:
                     removed += 1
             except FileNotFoundError:
                 continue
+
+        # work_dir 临时目录（转换/预热/打印 job）与散落 pdf（预览/打印残留）：
+        # 超过 TTL 无活动即清理，防止 prepare 中途出错残留
+        if self.work_dir.is_dir():
+            for path in self.work_dir.iterdir():
+                try:
+                    if current - path.stat().st_mtime <= self.cache_ttl_seconds:
+                        continue
+                    if path.is_dir() and path.name.startswith(("flyprint-", "libreoffice-")):
+                        shutil.rmtree(path, ignore_errors=True)
+                        removed += 1
+                    elif path.is_file() and path.suffix == ".pdf":
+                        path.unlink(missing_ok=True)
+                        removed += 1
+                except FileNotFoundError:
+                    continue
+
         if removed:
             self.logger.info("Canonical PDF cache cleanup removed=%s", removed)
         return removed
