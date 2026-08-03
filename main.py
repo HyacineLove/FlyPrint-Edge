@@ -180,6 +180,7 @@ async def startup_event():
         cloud_config,
         printer_manager,
         interactive_job_binder=bind_interactive_cloud_job,
+        node_missing_callback=_clear_global_node_id,
     )
 
     if cloud_service:
@@ -1525,6 +1526,12 @@ async def unbind_cloud_node():
     node_id = None
     await broadcast_sse_event("node_status_changed", {"status": "unbound", "node_id": None})
     return result
+
+
+def _clear_global_node_id():
+    """远程节点缺失时同步清除全局 node_id（供 CloudService 回调）。"""
+    global node_id
+    node_id = None
 
 
 @admin_router.get("/cloud/status")

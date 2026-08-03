@@ -33,10 +33,12 @@ class CloudService:
         config: Dict[str, Any],
         printer_manager=None,
         interactive_job_binder=None,
+        node_missing_callback=None,
     ):
         self.config = dict(config or {})
         self.printer_manager = printer_manager
         self.interactive_job_binder = interactive_job_binder
+        self.node_missing_callback = node_missing_callback
 
         self.auth_client = None
         self.api_client = None
@@ -150,6 +152,18 @@ class CloudService:
         if self.websocket_client:
             self.websocket_client.running = False
             self.websocket_client.connected = False
+            try:
+                # 真正停止 WebSocket 线程（关闭连接并 join），而非只设标志
+                self.websocket_client.stop()
+            except Exception as exc:
+                logger.debug("Failed to stop websocket client on node missing", exc_info=True)
+
+        # 通知宿主（main.py）同步全局 node_id，避免状态上报继续用旧节点号
+        if self.node_missing_callback:
+            try:
+                self.node_missing_callback()
+            except Exception as exc:
+                logger.debug("node_missing callback failed", exc_info=True)
 
         try:
             self._persist_node_id()
