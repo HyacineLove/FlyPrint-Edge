@@ -151,6 +151,12 @@ class UserPreviewPrintApiTests(unittest.TestCase):
         self.assertEqual(3, data["options"]["copies"])
         self.assertEqual("cloud-printer-1", data["printer_id"])
 
+    def test_submit_print_propagates_preview_page_count_to_cloud(self):
+        self.session_manager.set_preview_page_count(self.session_id, "file-1", 4)
+        response = self._submit(self._print_request(1))
+        self.assertTrue(response["success"])
+        self.assertEqual(4, self.cloud_service.websocket_client.sent_messages[0]["data"]["options"]["page_count"])
+
     def test_prp_source_uses_authorized_local_print_service(self):
         self.session_manager.bind_portal_identity({
             "terminal_session_id": self.session_id,
@@ -305,7 +311,46 @@ class UserPreviewPrintApiTests(unittest.TestCase):
             response = asyncio.run(main.preview(request))
         self.assertTrue(response["success"])
         cloud_download.assert_not_called()
-        self.assertIsNone(selections.get_source(self.session_id, "file-1"))
+        self.assertEqual(source, selections.get_source(self.session_id, "file-1"))
+
+    def test_prp_reselect_after_return_reuses_rendered_preview(self):
+        selections = PRPFileSelectionManager(Path(self.temp_dir.name))
+        source = selections.destination_for(self.session_id, "file-1")
+        source.write_bytes(b"%PDF-local")
+        public = selections.bind(self.session_id, {
+            "id": "file-1", "name": "sample.pdf", "media_type": "application/pdf",
+            "size": source.stat().st_size, "sha256": self.CONTENT_HASH,
+        }, source)
+        self.session_manager.bind_portal_identity({
+            "terminal_session_id": self.session_id, "site_portal_code": "official",
+            "cloud_user_id": "cloud-1", "external_user_id": "external-1",
+            "display_name": "User",
+        })
+        self.session_manager.bind_prp_file(self.session_id, public)
+        pipeline = Mock()
+        pipeline.resolve_canonical.return_value = CanonicalDocument(
+            self.CONTENT_HASH + "-pdf-v1", source, 1
+        )
+        pipeline.render_preview.return_value = PreviewPage(Image.new("RGB", (10, 10)), 1, 0)
+        request = DummyBodyRequest({
+            "session_id": self.session_id, "file_id": "file-1", "options": {"page_index": 0},
+        })
+        with patch.object(main, "printer_manager", self.printer_manager), \
+             patch.object(main, "interactive_session_manager", self.session_manager), \
+             patch.object(main, "prp_file_selection_manager", selections), \
+             patch.object(main, "build_document_pipeline", return_value=pipeline), \
+             patch.object(main, "get_file_manager", return_value=self.file_manager), \
+             patch.object(main, "_report_terminal_session_state"):
+            first = asyncio.run(main.preview(request))
+            asyncio.run(main.clear_prp_selection(DummyRequest({"session_id": self.session_id})))
+            cached = selections.activate_cached(self.session_id, "file-1")
+            self.assertIsNotNone(cached)
+            self.session_manager.bind_prp_file(self.session_id, cached)
+            second = asyncio.run(main.preview(request))
+
+        self.assertTrue(first["success"])
+        self.assertEqual(first["preview_url"], second["preview_url"])
+        pipeline.render_preview.assert_called_once()
 
     def test_preview_rejects_canonical_document_over_edge_page_limit(self):
         source_path = os.path.join(self.temp_dir.name, "preview.pdf")

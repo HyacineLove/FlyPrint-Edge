@@ -1,9 +1,11 @@
 import time
+import threading
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from cloud_service import PrinterStatusReporter
-from cloud_websocket_client import PrintJobHandler
+from cloud_websocket_client import CloudWebSocketClient, PrintJobHandler
+from printing.domain import PrintEvent, PrintState
 
 
 class _FakeWebSocket:
@@ -53,6 +55,29 @@ class PrintJobStatusReportingTests(unittest.TestCase):
         local_data = local_message["data"]
         self.assertEqual(2, local_data["current_page"])
         self.assertEqual(5, local_data["total_pages"])
+
+    def test_cloud_client_reports_portal_processing_status(self):
+        client = CloudWebSocketClient("ws://example.invalid", Mock(), node_id="node-1")
+        client.send_message_sync = Mock(return_value=True)
+        try:
+            self.assertTrue(
+                client.report_job_status(
+                    "job-portal",
+                    "printing",
+                    "printer is printing",
+                    current_page=2,
+                    total_pages=5,
+                )
+            )
+            message = client.send_message_sync.call_args.args[0]
+            self.assertEqual("job_update", message["type"])
+            self.assertEqual("node-1", message["node_id"])
+            self.assertEqual("processing", message["data"]["status"])
+            self.assertEqual("printer is printing", message["data"]["message"])
+            self.assertNotIn("current_page", message["data"])
+            self.assertNotIn("total_pages", message["data"])
+        finally:
+            client.stop()
 
     def test_unconfirmed_error_code_is_normalized_for_cloud(self):
         handler = self.make_handler()
@@ -126,6 +151,64 @@ class UploadTokenResponseCorrelationTests(unittest.TestCase):
 
 
 class PrinterStatusSnapshotReportingTests(unittest.TestCase):
+    def test_terminal_event_refreshes_printer_before_local_completion(self):
+        status_reporter = Mock()
+        status_reporter.force_report_printer.return_value = True
+        printer_manager = Mock()
+        printer_manager.config.get_printer_by_id.return_value = {"id": "p1", "name": "HP"}
+        handler = PrintJobHandler(
+            printer_manager,
+            _FakeApiClient(),
+            _FakeWebSocket(),
+            status_reporter=status_reporter,
+        )
+        order = []
+        completed = threading.Event()
+        handler._report_job_success = Mock(side_effect=lambda *_args: (order.append("job"), completed.set()))
+        fake_service = Mock()
+        fake_service.execute.side_effect = lambda _request, callback: callback(
+            PrintEvent(PrintState.COMPLETED, "done", "job-1")
+        )
+
+        def record_status(**_kwargs):
+            order.append("status")
+            return True
+
+        status_reporter.force_report_printer.side_effect = record_status
+        with patch("print_runtime.build_print_service", return_value=fake_service), patch(
+            "print_runtime.build_print_request", return_value=object()
+        ):
+            handler._start_ipp_print_service(
+                job_id="job-1",
+                printer_id="p1",
+                file_path=None,
+                job_name="file.pdf",
+                print_options={},
+                content_hash="a" * 64,
+                file_mgr=None,
+            )
+
+        self.assertTrue(completed.wait(1.0))
+        self.assertEqual(["status", "job"], order)
+
+    def test_terminal_printer_refresh_waits_for_cloud_status_update(self):
+        status_reporter = Mock()
+        handler = PrintJobHandler(
+            None,
+            _FakeApiClient(),
+            _FakeWebSocket(),
+            status_reporter=status_reporter,
+        )
+
+        handler._refresh_printer_status_after_terminal("cloud-printer", "HP")
+
+        status_reporter.force_report_printer.assert_called_once_with(
+            printer_id="cloud-printer",
+            printer_name="HP",
+            wait=True,
+            timeout=8.0,
+        )
+
     def test_build_status_payload_preserves_vertical_runtime_state(self):
         printer_manager = Mock()
         printer_manager.get_printer_status_detail.return_value = {

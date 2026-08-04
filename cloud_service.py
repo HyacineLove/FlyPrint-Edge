@@ -34,11 +34,13 @@ class CloudService:
         printer_manager=None,
         interactive_job_binder=None,
         node_missing_callback=None,
+        site_portal_client=None,
     ):
         self.config = dict(config or {})
         self.printer_manager = printer_manager
         self.interactive_job_binder = interactive_job_binder
         self.node_missing_callback = node_missing_callback
+        self.site_portal_client = site_portal_client
 
         self.auth_client = None
         self.api_client = None
@@ -197,6 +199,7 @@ class CloudService:
             self.api_client = CloudAPIClient(
                 base_url=runtime["base_url"],
                 auth_client=self.auth_client,
+                verify_ssl=bool(runtime.get("verify_ssl", True)),
             )
             self.api_client.edge_info = EdgeNodeInfo(
                 self.config.get("node_name") or None,
@@ -208,9 +211,12 @@ class CloudService:
                     runtime["base_url"],
                     self.node_id,
                     self.auth_client,
+                    verify_ssl=bool(runtime.get("verify_ssl", True)),
                 )
             else:
                 self.print_authorization_client = None
+            if self.site_portal_client is not None:
+                self.site_portal_client.verify_ssl = bool(runtime.get("verify_ssl", True))
 
             self.heartbeat_interval = self.config.get("heartbeat_interval", 30)
 
@@ -280,6 +286,7 @@ class CloudService:
                         interval=self.heartbeat_interval,
                         base_url=self.config.get("base_url"),
                         config_repo=self.printer_manager.config if self.printer_manager else None,
+                        verify_ssl=bool(self._runtime_cloud_config().get("verify_ssl", True)),
                     )
                     self.heartbeat_service.start()
                     logger.debug("Heartbeat service started in websocket mode")
@@ -481,6 +488,7 @@ class CloudService:
                 node_missing_handler=self._mark_remote_node_missing,
                 inbox_path=self._job_delivery_store_path(),
                 node_id=self.node_id,
+                verify_ssl=bool(self._runtime_cloud_config().get("verify_ssl", True)),
             )
             
             # 注册核心业务处理器（由 PrintJobHandler 处理云端下行指令）
@@ -504,12 +512,13 @@ class CloudService:
             # handler 在 pending_listeners / main 注册
 
             # 启动WebSocket客户端
-            self.websocket_client.start()
+            # Deferred until pending listeners are registered below.
             
             # 应用待处理的监听器
             if hasattr(self, 'pending_listeners'):
                 for msg_type, handler in self.pending_listeners:
                     self.websocket_client.add_message_handler(msg_type, handler)
+            self.websocket_client.start()
             
             logger.debug("WebSocket client started")
             
@@ -767,10 +776,16 @@ class CloudService:
         if not activation_code:
             return {"success": False, "message": "请输入激活码"}
         try:
-            health = requests.get(f"{base_url}/api/v1/health", timeout=10)
+            verify_ssl = bool(self._runtime_cloud_config().get("verify_ssl", True))
+            health = requests.get(f"{base_url}/api/v1/health", verify=verify_ssl, timeout=10)
             if health.status_code >= 400:
                 return {"success": False, "message": f"Cloud 健康检查失败: {health.status_code}"}
-            response = requests.post(f"{base_url}/api/v1/edge/activate", json={"activation_code": activation_code}, timeout=10)
+            response = requests.post(
+                f"{base_url}/api/v1/edge/activate",
+                json={"activation_code": activation_code},
+                verify=verify_ssl,
+                timeout=10,
+            )
             if response.status_code not in (200, 201):
                 return {"success": False, "message": "激活码无效、已过期或 Cloud 拒绝激活"}
             data = response.json().get("data") or {}

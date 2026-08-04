@@ -11,9 +11,10 @@ class SitePortalProtocolError(RuntimeError):
 
 
 class SitePortalClient:
-    def __init__(self, session=None, timeout: float = 8.0):
+    def __init__(self, session=None, timeout: float = 8.0, verify_ssl: bool = True):
         self._session = session or requests.Session()
         self._timeout = timeout
+        self.verify_ssl = bool(verify_ssl)
 
     @staticmethod
     def _claim_url(claim_base_url: str) -> str:
@@ -31,16 +32,20 @@ class SitePortalClient:
         node_id: str,
         terminal_session_id: str,
     ) -> Dict[str, Any]:
-        response = self._session.post(
-            self._claim_url(claim_base_url),
-            json={
-                "claim_code": claim_code,
-                "site_portal_code": site_portal_code,
-                "node_id": node_id,
-                "terminal_session_id": terminal_session_id,
-            },
-            timeout=self._timeout,
-        )
+        try:
+            response = self._session.post(
+                self._claim_url(claim_base_url),
+                json={
+                    "claim_code": claim_code,
+                    "site_portal_code": site_portal_code,
+                    "node_id": node_id,
+                    "terminal_session_id": terminal_session_id,
+                },
+                verify=self.verify_ssl,
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            raise SitePortalProtocolError("Site Portal 领取请求失败") from exc
         if response.status_code != 200:
             raise SitePortalProtocolError(f"Site Portal 拒绝领取: HTTP {response.status_code}")
         try:

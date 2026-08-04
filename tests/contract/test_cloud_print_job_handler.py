@@ -39,7 +39,7 @@ class TerminalReportRecorder:
 class CloudPrintAdapterTests(unittest.TestCase):
     def make_handler(self):
         handler = PrintJobHandler(
-            api_client=Mock(node_id="node"),
+            api_client=Mock(node_id="node", base_url="https://example.invalid"),
             printer_manager=DummyPrinterManager(),
             websocket_client=Mock(),
         )

@@ -34,6 +34,7 @@ class PortalPrintService:
         config_repo,
         session_manager,
         terminal_reporter,
+        status_reporter,
         local_event_publisher=None,
         executor=None,
         logger,
@@ -43,6 +44,7 @@ class PortalPrintService:
         self.config_repo = config_repo
         self.session_manager = session_manager
         self.terminal_reporter = terminal_reporter
+        self.status_reporter = status_reporter
         self.local_event_publisher = local_event_publisher
         self.executor = executor or _EXECUTOR
         self.logger = logger
@@ -179,6 +181,19 @@ class PortalPrintService:
             accepted = self.session_manager.accept_job_status_event(payload)
             if accepted and self.local_event_publisher:
                 self.local_event_publisher(accepted)
+            if event.state not in TERMINAL_STATES:
+                if not self.status_reporter.report_job_status(
+                    event.job_id,
+                    event.state.value,
+                    event.message,
+                    current_page=event.current_page,
+                    total_pages=event.total_pages,
+                ):
+                    self.logger.warning(
+                        "unable to report portal print status to Cloud job_id=%s status=%s",
+                        event.job_id,
+                        event.state.value,
+                    )
             if event.state in TERMINAL_STATES and not terminal_seen:
                 terminal_seen = True
                 self._report_terminal(event, page_count, options)

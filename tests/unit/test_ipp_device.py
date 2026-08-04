@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from printing.domain import ErrorCode, PrintOptions
 from printing.ipp_device import (
@@ -6,6 +7,7 @@ from printing.ipp_device import (
     active_job_fault,
     normalize_capabilities,
     normalize_printer_runtime,
+    probe_printer,
     printer_fault,
     validate_options,
 )
@@ -53,6 +55,25 @@ class IppDevicePolicyTests(unittest.TestCase):
             ],
             attributes,
         )
+
+    def test_probe_does_not_require_operation_attribute_fidelity(self):
+        snapshot = {
+            "printer-uuid": ["urn:uuid:p1"], "printer-name": ["Printer"],
+            "printer-state": [3], "printer-state-reasons": ["none"],
+            "printer-is-accepting-jobs": [True], "operations-supported": [2, 8, 9, 11],
+            "document-format-supported": ["application/pdf"], "ipp-versions-supported": ["2.0"],
+            "job-creation-attributes-supported": ["copies", "sides", "print-color-mode", "media"],
+            "copies-supported": [[1, 99]], "sides-supported": ["one-sided", "two-sided-long-edge"],
+            "print-color-mode-supported": ["monochrome", "color"], "media-supported": ["iso_a4_210x297mm"],
+        }
+
+        class Response:
+            def values(self, name):
+                return snapshot.get(name, [])
+
+        with patch("printing.ipp_device.IppClient.get_printer_attributes", return_value=Response()):
+            probe = probe_printer("ipp://192.0.2.2:631/ipp/print")
+        self.assertTrue(probe.compatible)
 
     def test_printer_alert_alone_does_not_cancel_active_job(self):
         job = {"job-state": [5], "job-state-reasons": ["job-printing"]}

@@ -242,7 +242,7 @@ def probe_printer(ipp_uri: str, *, timeout: float = 5.0) -> IppPrinterProbe:
         issues.append("设备不支持直接打印 PDF")
     if missing := REQUIRED_OPERATIONS - operations:
         issues.append("设备缺少必要的 IPP 作业操作: " + ", ".join(f"0x{item:04X}" for item in sorted(missing)))
-    for required in ("copies", "sides", "print-color-mode", "media", "ipp-attribute-fidelity"):
+    for required in ("copies", "sides", "print-color-mode", "media"):
         if required not in creation:
             issues.append(f"设备不支持作业属性 {required}")
     if not snapshot.get("copies-supported"):

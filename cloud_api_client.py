@@ -17,9 +17,10 @@ logger = logging.getLogger(__name__)
 class CloudAPIClient:
     """云端API客户端"""
     
-    def __init__(self, base_url: str, auth_client: CloudAuthClient):
+    def __init__(self, base_url: str, auth_client: CloudAuthClient, verify_ssl: bool = True):
         self.base_url = base_url.rstrip('/')
         self.auth_client = auth_client
+        self.verify_ssl = bool(verify_ssl)
         self.node_id = None  # 注册后获得
         self.edge_info = EdgeNodeInfo()
     
@@ -42,7 +43,7 @@ class CloudAPIClient:
             for i, printer in enumerate(printers):
                 logger.debug("Registering printer %s/%s: %s", i + 1, len(printers), printer["name"])
                 
-                response = requests.post(url, json=printer, headers=headers, timeout=10)
+                response = requests.post(url, json=printer, headers=headers, verify=self.verify_ssl, timeout=10)
                 
                 if response.status_code in [200, 201]:
                     success_count += 1
@@ -69,7 +70,7 @@ class CloudAPIClient:
                     )
             
             return {
-                "success": True, 
+                "success": bool(success_count or not printers),
                 "success_count": success_count, 
                 "failed_count": len(failed_printers),
                 "failed_printers": failed_printers,
@@ -88,7 +89,7 @@ class CloudAPIClient:
         try:
             url = f"{self.base_url}/api/v1/edge/{self.node_id}/printers/{printer_id}"
             headers = self.auth_client.get_auth_headers()
-            response = requests.delete(url, headers=headers, timeout=10)
+            response = requests.delete(url, headers=headers, verify=self.verify_ssl, timeout=10)
             if response.status_code in [200, 204]:
                 return {"success": True}
             return {"success": False, "error": response.text}
@@ -122,7 +123,7 @@ class CloudAPIClient:
             
             logger.debug("Batch printer status update: url=%s count=%s", url, len(printers))
             
-            response = requests.post(url, json=data, headers=headers, timeout=10)
+            response = requests.post(url, json=data, headers=headers, verify=self.verify_ssl, timeout=10)
             
             if response.status_code == 200:
                 result = response.json()
@@ -163,6 +164,7 @@ class CloudAPIClient:
                 f"{self.base_url}/api/v1/edge/self/profile",
                 json=payload,
                 headers=self.auth_client.get_auth_headers(),
+                verify=self.verify_ssl,
                 timeout=10,
             )
             if response.status_code == 200:
@@ -178,6 +180,7 @@ class CloudAPIClient:
             response = requests.get(
                 f"{self.base_url}/api/v1/edge/self/contacts",
                 headers=self.auth_client.get_auth_headers(),
+                verify=self.verify_ssl,
                 timeout=10,
             )
             if response.status_code == 200:

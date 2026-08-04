@@ -44,7 +44,6 @@ Source: "dist\flyprint-edge\{#MyLauncherExeName}"; DestDir: "{app}"; Flags: igno
 Source: "dist\flyprint-edge\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "dist\flyprint-edge\_internal\config.example.json"; DestDir: "{app}"; DestName: "config.example.json"; Flags: ignoreversion
 Source: "dist\flyprint-edge\_internal\config.example.json"; DestDir: "{app}"; DestName: "config.json"; Flags: ignoreversion onlyifdoesntexist
-Source: "dist\flyprint-edge\_internal\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Dirs]
 Name: "{app}\logs"

@@ -181,6 +181,7 @@ async def startup_event():
         printer_manager,
         interactive_job_binder=bind_interactive_cloud_job,
         node_missing_callback=_clear_global_node_id,
+        site_portal_client=site_portal_client,
     )
 
     if cloud_service:
@@ -414,6 +415,7 @@ async def shutdown_event():
     logger.info(" Edge Server 正在停止...")
     _report_terminal_session_state(None)
     active = interactive_session_manager.get_active_session()
+    active_session_id = active.get("session_id") if active else None
     if active:
         prp_file_selection_manager.clear_session(active["session_id"])
     portal_session_manager.clear()
@@ -422,6 +424,8 @@ async def shutdown_event():
     # 停止文件管理器
     file_mgr = get_file_manager()
     if file_mgr:
+        if active_session_id:
+            file_mgr.release_preview_session(active_session_id, reason="shutdown")
         file_mgr.cleanup_all_preview_files()
         file_mgr.stop()
     stop_document_pipelines()
@@ -643,17 +647,23 @@ def _build_file_url(file_url: str):
 
 def _download_preview_file(file_url: str, file_name: Optional[str], file_id: Optional[str] = None):
     path = None
+    resp = None
     try:
+        from download_security import MAX_CLOUD_DOWNLOAD_BYTES, validate_download_url
         headers = cloud_service.auth_client.get_auth_headers() if cloud_service and cloud_service.auth_client else {}
 
         file_mgr = get_file_manager()
         download_url = None
         auth_mode = "bearer"
-        file_access_token = file_mgr.consume_file_access_token(file_id) if file_mgr and file_id else None
+        file_access_token = file_mgr.get_file_access_token(file_id) if file_mgr and file_id else None
         if file_access_token:
             from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-            full_url = _build_file_url(file_url)
+            full_url = validate_download_url(
+                _build_file_url(file_url),
+                cloud_service.api_client.base_url,
+                allow_signed_url=True,
+            )
             parsed = urlparse(full_url)
             query_params = parse_qs(parsed.query)
             query_params["token"] = [file_access_token]
@@ -674,7 +684,11 @@ def _download_preview_file(file_url: str, file_name: Optional[str], file_id: Opt
             logger.warning("Preview file token missing: file_id=%s", file_id)
 
         if not download_url:
-            download_url = _build_file_url(file_url)
+            download_url = validate_download_url(
+                _build_file_url(file_url),
+                cloud_service.api_client.base_url,
+                allow_signed_url=True,
+            )
 
         ext = os.path.splitext(file_name or "")[1].lower() or ".bin"
         path = get_temp_file_path(prefix="preview", suffix=ext)
@@ -690,8 +704,19 @@ def _download_preview_file(file_url: str, file_name: Optional[str], file_id: Opt
             path,
         )
 
-        resp = requests.get(download_url, headers=headers, stream=True, timeout=60)
+        resp = requests.get(
+            download_url,
+            headers=headers,
+            stream=True,
+            verify=bool(getattr(getattr(cloud_service, "auth_client", None), "verify_ssl", True)),
+            timeout=60,
+        )
         if resp.status_code != 200:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            path = None
             logger.warning(
                 "Preview file download failed: file_id=%s status=%s",
                 file_id,
@@ -699,9 +724,16 @@ def _download_preview_file(file_url: str, file_name: Optional[str], file_id: Opt
             )
             return None, f"下载文件失败: {resp.status_code}"
 
+        length_header = resp.headers.get("Content-Length")
+        if length_header and int(length_header) > MAX_CLOUD_DOWNLOAD_BYTES:
+            raise ValueError("preview file exceeds size limit")
         with open(path, "wb") as f:
+            downloaded = 0
             for chunk in resp.iter_content(chunk_size=8192):
                 if chunk:
+                    downloaded += len(chunk)
+                    if downloaded > MAX_CLOUD_DOWNLOAD_BYTES:
+                        raise ValueError("preview file exceeds size limit")
                     f.write(chunk)
         logger.info(
             "Preview file downloaded: file_id=%s ext=%s auth=%s status=%s",
@@ -719,6 +751,9 @@ def _download_preview_file(file_url: str, file_name: Optional[str], file_id: Opt
                 pass
         logger.exception("Preview file download failed: file_id=%s file_name=%s", file_id, file_name)
         return None, str(e)
+    finally:
+        if resp is not None:
+            resp.close()
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -996,7 +1031,11 @@ async def get_qr_code():
 
     previous_session = interactive_session_manager.get_active_session()
     if previous_session:
-        prp_file_selection_manager.clear_session(previous_session["session_id"])
+        previous_session_id = previous_session["session_id"]
+        prp_file_selection_manager.clear_session(previous_session_id)
+        file_mgr = get_file_manager()
+        if file_mgr:
+            file_mgr.release_preview_session(previous_session_id, reason="new_session")
     portal_session_manager.clear()
     session = interactive_session_manager.start_session(upload_token=token_data["token"])
     _report_terminal_session_state(session)
@@ -1069,6 +1108,16 @@ async def events(request: Request):
 
 @app.get("/api/session/current")
 async def get_current_interactive_session():
+    active = interactive_session_manager.get_active_session() or {}
+    if active.get("entry_type") == "site_portal" and not portal_session_manager.snapshot().get("active"):
+        session_id = active.get("session_id")
+        interactive_session_manager.clear_session(session_id)
+        prp_file_selection_manager.clear_session(session_id)
+        portal_session_manager.clear(session_id)
+        file_mgr = get_file_manager()
+        if file_mgr:
+            file_mgr.release_preview_session(session_id, reason="portal_session_expired")
+        _report_terminal_session_state(None)
     return interactive_session_manager.build_snapshot()
 
 @app.get("/api/prp/files")
@@ -1101,6 +1150,13 @@ async def select_prp_file(file_id: str, request: Request):
             status_code=401,
             content={"success": False, "error_code": "portal_session_invalid"},
         )
+    cached = prp_file_selection_manager.activate_cached(session_id, file_id)
+    if cached:
+        if interactive_session_manager.bind_prp_file(session_id, cached):
+            logger.info("PRP source cache hit: session_id=%s file_id=%s", session_id, file_id)
+            return {"success": True, "file": cached, "cache_hit": True}
+        prp_file_selection_manager.release_selection(session_id)
+
     destination = None
     downloaded_source = None
     try:
@@ -1113,7 +1169,7 @@ async def select_prp_file(file_id: str, request: Request):
             session_id, downloaded, downloaded_source
         )
         if not interactive_session_manager.bind_prp_file(session_id, public):
-            prp_file_selection_manager.clear_session(session_id)
+            prp_file_selection_manager.release_selection(session_id)
             return JSONResponse(
                 status_code=409,
                 content={"success": False, "error_code": "session_binding_failed"},
@@ -1142,10 +1198,7 @@ async def clear_prp_selection(request: Request):
             content={"success": False, "error_code": "prp_selection_not_active"},
         )
 
-    prp_file_selection_manager.clear_session(session_id)
-    file_mgr = get_file_manager()
-    if file_mgr:
-        file_mgr.release_preview_resource(file_id, reason="prp_deselect")
+    prp_file_selection_manager.release_selection(session_id)
     _report_terminal_session_state(interactive_session_manager.get_active_session())
     return {"success": True, "state": "identity_ready"}
 
@@ -1204,7 +1257,9 @@ async def preview(request: Request):
             page_index = 0
         options_for_cache = dict(options)
         options_for_cache["page_index"] = page_index
-        key = f"{file_id}:{json.dumps(options_for_cache, sort_keys=True, ensure_ascii=False)}"
+        cache_identity = content_hash if is_valid_content_hash(content_hash) else file_id
+        cache_scope = f"session:{session_id}" if session_id else f"file:{file_id}"
+        key = f"{cache_scope}:{cache_identity}:{json.dumps(options_for_cache, sort_keys=True, ensure_ascii=False)}"
 
         file_mgr = get_file_manager()
         if not file_mgr:
@@ -1255,9 +1310,14 @@ async def preview(request: Request):
                 raise EdgeLimitExceeded(limit_message)
             return source_path
 
-        canonical = pipeline.resolve_canonical(identity, source_supplier, delete_source=True)
-        if is_prp_source:
-            prp_file_selection_manager.release(session_id, file_id)
+        # PRP sources are session caches. Keep the downloaded source until the
+        # session is explicitly cleaned up so reselecting the same file does
+        # not require another PRP download.
+        canonical = pipeline.resolve_canonical(
+            identity,
+            source_supplier,
+            delete_source=not is_prp_source,
+        )
         page_limit_message = validate_page_count(canonical.page_count, _get_settings())
         if page_limit_message:
             return JSONResponse(
@@ -1275,11 +1335,14 @@ async def preview(request: Request):
         image.save(buffer, format="PNG")
         encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
         data_url = f"data:image/png;base64,{encoded}"
-        cache_key = f"{file_id}:{json.dumps({**options_for_cache, 'page_index': resolved_page_index}, sort_keys=True, ensure_ascii=False)}"
+        cache_key = f"{cache_scope}:{cache_identity}:{json.dumps({**options_for_cache, 'page_index': resolved_page_index}, sort_keys=True, ensure_ascii=False)}"
         file_mgr.put_preview(cache_key, {
             "preview_url": data_url,
             "page_count": page_count,
             "page_index": resolved_page_index,
+            "file_id": file_id,
+            "session_id": session_id,
+            "content_hash": content_hash,
         })
         if session_id:
             interactive_session_manager.set_preview_page_count(
@@ -1337,6 +1400,8 @@ async def submit_print(request: Request):
             return JSONResponse(status_code=409, content={"success": False, "message": "当前会话已失效，请重新扫码"})
         active_session = interactive_session_manager.get_active_session() or {}
         options["copies"] = _clamp_copy_count(options.get("copies"))
+        if active_session.get("page_count"):
+            options["page_count"] = int(active_session["page_count"])
 
         if cloud_service and cloud_service.websocket_client:
             printer_id = _ensure_default_printer()
@@ -1367,6 +1432,7 @@ async def submit_print(request: Request):
                     config_repo=printer_manager.config,
                     session_manager=interactive_session_manager,
                     terminal_reporter=cloud_service.websocket_client,
+                    status_reporter=cloud_service.websocket_client,
                     local_event_publisher=publish_local_job_status,
                     logger=logger,
                 )
@@ -1417,7 +1483,7 @@ async def submit_print(request: Request):
             # 清理预览文件（打印时会重新下载，预览文件不再需要）
             file_mgr = get_file_manager()
             if file_mgr:
-                file_mgr.release_preview_resource(file_id, reason="print")
+                file_mgr.release_preview_resource(file_id, reason="print", session_id=session_id)
             
             return {"success": True, "message": "打印任务已提交"}
         else:
@@ -1447,9 +1513,11 @@ async def cleanup_preview_file(request: Request):
             _report_terminal_session_state(None)
         
         # 通过文件管理器清理
-        if file_id:
-            file_mgr = get_file_manager()
-            if file_mgr:
+        file_mgr = get_file_manager()
+        if file_mgr:
+            if session_id:
+                file_mgr.release_preview_session(session_id, reason="cancel")
+            elif file_id:
                 file_mgr.release_preview_resource(file_id, reason="cancel")
         
         return {"success": True, "message": "文件已清理"}
@@ -1874,7 +1942,11 @@ def run_server():
     log_settings = configure_logging(config_repo.get_full_config())
     config = config_repo.config
     network_cfg = config.get("network", {})
-    bind_address = network_cfg.get("bind_address", "127.0.0.1")
+    bind_address = str(network_cfg.get("bind_address", "127.0.0.1")).strip()
+    from config_service import ConfigService
+    errors = ConfigService(None).validate({"cloud": {}, "settings": {}, "network": network_cfg})
+    if errors:
+        raise ValueError("invalid local server configuration: " + "; ".join(errors))
     port = network_cfg.get("port", 7860)
     
     logger.info(f" 启动服务: {bind_address}:{port}")

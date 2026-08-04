@@ -52,6 +52,7 @@ class PrintAuthorizationClientTests(unittest.TestCase):
                 "Authorization": "Bearer node-token",
                 "Content-Type": "application/json",
             },
+            verify=True,
             timeout=10,
         )
 

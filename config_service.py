@@ -67,7 +67,7 @@ class ConfigService:
                 continue
             merged.setdefault(section, {})
             for key, value in update[section].items():
-                if section == "cloud" and key not in {"base_url", "node_name", "location", "heartbeat_interval"}:
+                if section == "cloud" and key not in {"base_url", "node_name", "location", "heartbeat_interval", "verify_ssl"}:
                     continue
                 merged[section][key] = value
         merged.setdefault("cloud", {})
@@ -167,6 +167,10 @@ class ConfigService:
 
         if not str(network.get("bind_address") or "").strip():
             errors.append("network.bind_address must not be empty")
+        else:
+            bind_address = str(network.get("bind_address")).strip()
+            if bind_address not in {"127.0.0.1", "::1"}:
+                errors.append("network.bind_address must be loopback-only")
 
         try:
             port = int(network.get("port", 7860))
@@ -241,7 +245,11 @@ class ConfigService:
             return {"success": True, "message": "\u6821\u9a8c\u901a\u8fc7"}
 
         try:
-            response = requests.get(f"{base_url}/api/v1/health", timeout=5)
+            response = requests.get(
+                f"{base_url}/api/v1/health",
+                verify=bool(cloud.get("verify_ssl", True)),
+                timeout=5,
+            )
             if response.status_code >= 400:
                 return {"success": False, "message": f"\u4e91\u7aef\u5065\u5eb7\u68c0\u67e5\u5931\u8d25: {response.status_code}"}
         except Exception as exc:

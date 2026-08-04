@@ -7,6 +7,7 @@ fly-print-cloud 心跳服务
 import logging
 import threading
 import time
+import requests
 import psutil
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 class HeartbeatService:
     """心跳服务 - 通过WebSocket发送心跳"""
     
-    def __init__(self, websocket_client, node_id: str, interval: int = 30, base_url: str = None, config_repo=None):
+    def __init__(self, websocket_client, node_id: str, interval: int = 30, base_url: str = None, config_repo=None, verify_ssl: bool = True):
         """初始化心跳服务
         
         Args:
@@ -31,6 +32,7 @@ class HeartbeatService:
         self.interval = interval
         self.base_url = base_url
         self.config_repo = config_repo
+        self.verify_ssl = bool(verify_ssl)
         self.running = False
         self.thread = None
         self.last_heartbeat_time = 0
@@ -193,11 +195,10 @@ class HeartbeatService:
             if not self.base_url:
                 return 0
                 
-            import requests
             start_time = time.time()
             url = f"{self.base_url}/api/v1/health"
             # 使用较短的超时，仅用于测量
-            requests.get(url, timeout=3)
+            requests.get(url, verify=self.verify_ssl, timeout=3)
             end_time = time.time()
             
             # 计算毫秒延迟
@@ -225,7 +226,7 @@ class HeartbeatService:
             url = f"{self.base_url}/api/v1/health"
             logger.debug("Sending HTTP heartbeat: url=%s", url)
             
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, verify=self.verify_ssl, timeout=5)
             
             if response.status_code == 200:
                 self.last_heartbeat_time = time.time()

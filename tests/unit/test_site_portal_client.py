@@ -1,4 +1,5 @@
 import unittest
+import requests
 
 from site_portal_client import SitePortalClient, SitePortalProtocolError
 
@@ -20,6 +21,11 @@ class FakeSession:
     def post(self, url, **kwargs):
         self.calls.append((url, kwargs))
         return self.response
+
+
+class FailingSession:
+    def post(self, url, **kwargs):
+        raise requests.ConnectionError("offline")
 
 
 class SitePortalClientTests(unittest.TestCase):
@@ -48,6 +54,11 @@ class SitePortalClientTests(unittest.TestCase):
         self.assertEqual("https://portal.example.test/api/claims/redeem", url)
         self.assertEqual("claim-code-1", options["json"]["claim_code"])
         self.assertEqual(3, options["timeout"])
+
+    def test_redeem_maps_network_error_to_protocol_error(self):
+        client = SitePortalClient(session=FailingSession())
+        with self.assertRaises(SitePortalProtocolError):
+            client.redeem("https://portal.example.test", "claim-code-1", "official", "edge-1", "session-1")
 
     def test_redeem_rejects_incomplete_response(self):
         client = SitePortalClient(session=FakeSession(FakeResponse(payload={

@@ -118,11 +118,42 @@ class FileManager:
             self.preview_cache[key] = stored
             self._enforce_preview_limits_locked()
 
-    def release_preview_resource(self, file_id: str, reason: str = "manual") -> bool:
+    def release_preview_resource(
+        self,
+        file_id: str,
+        reason: str = "manual",
+        *,
+        session_id: Optional[str] = None,
+    ) -> bool:
         del reason
         removed = False
         with self.preview_lock:
-            keys = [key for key in self.preview_cache if key.startswith(f"{file_id}:")]
+            keys = []
+            for key, value in self.preview_cache.items():
+                if isinstance(value, dict) and value.get("file_id"):
+                    if value.get("file_id") != file_id:
+                        continue
+                    if session_id and value.get("session_id") != session_id:
+                        continue
+                    keys.append(key)
+                elif key.startswith(f"{file_id}:"):
+                    keys.append(key)
+            for key in keys:
+                self.preview_cache.pop(key, None)
+                removed = True
+        return removed
+
+    def release_preview_session(self, session_id: str, reason: str = "manual") -> bool:
+        del reason
+        removed = False
+        with self.preview_lock:
+            keys = [
+                key
+                for key, value in self.preview_cache.items()
+                if (isinstance(value, dict) and value.get("session_id") == session_id)
+                or key.startswith(f"{session_id}:")
+                or key.startswith(f"session:{session_id}:")
+            ]
             for key in keys:
                 self.preview_cache.pop(key, None)
                 removed = True
@@ -159,6 +190,14 @@ class FileManager:
     def consume_file_access_token(self, file_id: str) -> Optional[str]:
         with self.token_lock:
             token_info = self.file_access_tokens.pop(file_id, None)
+        if not token_info or self._token_is_expired(token_info.get("expires_at")):
+            return None
+        return token_info.get("token")
+
+    def get_file_access_token(self, file_id: str) -> Optional[str]:
+        """读取仍在有效期内的下载凭证；预览分页需要复用同一凭证。"""
+        with self.token_lock:
+            token_info = self.file_access_tokens.get(file_id)
         if not token_info or self._token_is_expired(token_info.get("expires_at")):
             return None
         return token_info.get("token")

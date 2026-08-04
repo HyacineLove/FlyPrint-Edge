@@ -142,6 +142,17 @@ class UserPreviewAssetTests(unittest.TestCase):
             r"if\s*\(\s*result\.type\s*===\s*\"error\"[\s\S]*?setCountdownAccessoryVisible\(true\)",
         )
 
+    def test_successful_prp_done_view_offers_continue_file_selection(self):
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        controller = read_source(BASE_DIR / "modules/app/app-controller.js")
+
+        self.assertIn('id="115_43"', done_view)
+        self.assertIn("continueToFiles", done_view)
+        self.assertIn("source_origin === \"prp\"", done_view)
+        self.assertIn("async function continueToFiles", controller)
+        self.assertIn("api.prpSelection", controller)
+        self.assertIn('await router.go("files")', controller)
+
     def test_app_controller_failed_snapshot_uses_snapshot_error_fields(self):
         controller = read_source(BASE_DIR / "modules/app/app-controller.js")
 

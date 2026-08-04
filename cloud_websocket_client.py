@@ -11,9 +11,10 @@ import threading
 import time
 import logging
 import requests
+import ssl
+from download_security import MAX_CLOUD_DOWNLOAD_BYTES, validate_download_url
 
 # 单次 Cloud 打印文件下载字节上限（与打印文件尺寸上限一致，防止异常文件写满磁盘）
-MAX_CLOUD_DOWNLOAD_BYTES = 200 * 1024 * 1024
 import os
 import base64
 import shutil
@@ -49,11 +50,12 @@ _CLOUD_OPERATIONAL_ERROR_CODES = {
 class CloudWebSocketClient:
     """云端WebSocket客户端"""
     
-    def __init__(self, websocket_url: str, auth_client: CloudAuthClient, node_missing_handler: Optional[Callable[[str], None]] = None, inbox_path: Optional[str] = None, node_id: Optional[str] = None):
+    def __init__(self, websocket_url: str, auth_client: CloudAuthClient, node_missing_handler: Optional[Callable[[str], None]] = None, inbox_path: Optional[str] = None, node_id: Optional[str] = None, verify_ssl: bool = True):
         self.websocket_url = websocket_url
         self.auth_client = auth_client
         self.node_missing_handler = node_missing_handler
         self.node_id = str(node_id or "")
+        self.verify_ssl = bool(verify_ssl)
         self.websocket = None
         self.running = False
         self.connected = False  # 实际连接状态（握手成功才为True）
@@ -351,9 +353,15 @@ class CloudWebSocketClient:
                     "Upgrade": "websocket"
                 }
                 
+                websocket_ssl = (
+                    ssl._create_unverified_context()
+                    if not self.verify_ssl and self.websocket_url.lower().startswith("wss://")
+                    else None
+                )
                 async with websockets.connect(
                     self.websocket_url, 
                     additional_headers=headers,
+                    ssl=websocket_ssl,
                     # UAT/公网反代下控制帧易延迟；10s 过紧会导致约 40–50s 闪断。
                     # 放宽超时，并略拉长 ping 间隔，降低经 Nginx/HTTPS 的误断。
                     ping_interval=45,
@@ -608,6 +616,51 @@ class CloudWebSocketClient:
                 "entry_type": session.get("entry_type") or "",
                 "integration_request_id": session.get("integration_request_id") or "",
             },
+        }
+        return self.send_message_sync(message)
+
+    def report_job_status(
+        self,
+        job_id: str,
+        status: str,
+        message_text: str = "",
+        current_page: Optional[int] = None,
+        total_pages: Optional[int] = None,
+    ) -> bool:
+        """Send a realtime non-terminal print status update to Cloud.
+
+        Terminal reports use the durable job-delivery outbox. Process-state
+        reports are intentionally realtime-only and are persisted by Cloud
+        when received, so Portal printing can expose the same processing state
+        as Cloud-dispatched printing without creating a second terminal queue.
+        """
+        if not job_id:
+            return False
+
+        cloud_status = (
+            "processing"
+            if status in {"preparing", "submitting", "queued", "printing"}
+            else status
+        )
+        if cloud_status != "processing":
+            return False
+
+        from datetime import datetime, timezone
+
+        data: Dict[str, Any] = {
+            "job_id": job_id,
+            "status": cloud_status,
+            "error_code": "",
+            "error_message": None,
+            "message": message_text,
+        }
+        # Current page data is kept local for the kiosk UI until the protocol
+        # adds dedicated progress fields to JobUpdateData.
+        message = {
+            "type": "job_update",
+            "node_id": self.node_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": data,
         }
         return self.send_message_sync(message)
 
@@ -933,6 +986,20 @@ class PrintJobHandler:
 
         def report(event):
             nonlocal last_status_refresh_state
+            terminal = event.state in {
+                PrintState.COMPLETED,
+                PrintState.FAILED,
+                PrintState.CANCELED,
+                PrintState.UNCONFIRMED,
+            }
+            if terminal and self.status_reporter and event.state != last_status_refresh_state:
+                last_status_refresh_state = event.state
+                if not self._refresh_printer_status_after_terminal(printer_id, printer.get("name")):
+                    logger.warning(
+                        "Post-terminal printer status refresh did not complete: job_id=%s printer_id=%s",
+                        job_id,
+                        printer_id,
+                    )
             if event.state == PrintState.COMPLETED:
                 self._report_job_success(job_id, printer_id)
             elif event.state in {PrintState.FAILED, PrintState.CANCELED, PrintState.UNCONFIRMED}:
@@ -951,11 +1018,7 @@ class PrintJobHandler:
                     current_page=event.current_page,
                     total_pages=event.total_pages,
                 )
-            if (
-                self.status_reporter
-                and event.state in {PrintState.QUEUED, PrintState.COMPLETED, PrintState.FAILED, PrintState.CANCELED, PrintState.UNCONFIRMED}
-                and event.state != last_status_refresh_state
-            ):
+            if self.status_reporter and event.state == PrintState.QUEUED and event.state != last_status_refresh_state:
                 last_status_refresh_state = event.state
                 self.status_reporter.force_report_printer(
                     printer_id=printer_id,
@@ -973,6 +1036,17 @@ class PrintJobHandler:
 
         import threading
         threading.Thread(target=run, name=f"print-{job_id}", daemon=True).start()
+
+    def _refresh_printer_status_after_terminal(self, printer_id: str, printer_name: str = None) -> bool:
+        """Synchronously publish the post-job printer state before the UI sees completion."""
+        if not self.status_reporter:
+            return False
+        return bool(self.status_reporter.force_report_printer(
+            printer_id=printer_id,
+            printer_name=printer_name,
+            wait=True,
+            timeout=8.0,
+        ))
 
     def _download_print_file(self, file_url: str, job_id: str, expected_filename: str = None, file_access_token: str = None, content_hash: str = None) -> Optional[str]:
         """下载打印文件
@@ -999,6 +1073,15 @@ class PrintJobHandler:
             if file_url and not file_url.startswith(('http://', 'https://')):
                 if self.api_client and self.api_client.base_url:
                     file_url = f"{self.api_client.base_url.rstrip('/')}/{file_url.lstrip('/')}"
+
+            base_url = getattr(self.api_client, "base_url", None) if self.api_client else None
+            if not isinstance(base_url, str) or not base_url.strip():
+                raise ValueError("Cloud base URL is unavailable")
+            file_url = validate_download_url(
+                file_url,
+                base_url,
+                allow_signed_url=True,
+            )
 
             # 确定认证方式
             headers = {}
@@ -1040,7 +1123,13 @@ class PrintJobHandler:
                 parsed_download.path,
             )
             
-            response = requests.get(download_url, headers=headers, stream=True, timeout=30)
+            response = requests.get(
+                download_url,
+                headers=headers,
+                stream=True,
+                verify=bool(getattr(self.auth_client, "verify_ssl", True)),
+                timeout=30,
+            )
             if response.status_code != 200:
                 logger.error("Print file download failed: job_id=%s status=%s", job_id, response.status_code)
                 response.close()

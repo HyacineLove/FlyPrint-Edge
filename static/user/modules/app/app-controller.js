@@ -17,8 +17,8 @@ import {
   renderCommonText,
   startClockLoop,
 } from "../shared/runtime.js";
-import { api, getJson } from "../shared/api.js";
-import { currentSessionId, saveSessionState, setDoneResult, setOpsContacts, setPendingPrintRequest } from "../shared/session-state.js";
+import { api, getJson, postJson } from "../shared/api.js";
+import { clearPendingPrintRequest, currentSessionId, saveSessionState, setDoneResult, setOpsContacts, setPendingPrintRequest } from "../shared/session-state.js";
 import { applyIdentityReady } from "./identity-session.js";
 
 const viewRegistry = {
@@ -34,6 +34,7 @@ export function createAppController({ mountNode }) {
   const state = createAppState();
   let currentViewApi = null;
   let restartInFlight = false;
+  let continueInFlight = false;
   let started = false;
 
   const render = () => {
@@ -65,6 +66,7 @@ export function createAppController({ mountNode }) {
       router,
       queuePrintRequest,
       restartCycle,
+      continueToFiles,
       finishWithResult,
     };
   }
@@ -341,6 +343,27 @@ export function createAppController({ mountNode }) {
       await router.go("login");
     } finally {
       restartInFlight = false;
+    }
+  }
+
+  async function continueToFiles() {
+    if (continueInFlight) return;
+    const sessionId = state.session?.session_id;
+    if (!sessionId || state.session?.file?.source_origin !== "prp") {
+      throw new Error("当前会话不支持继续选择文件");
+    }
+    continueInFlight = true;
+    try {
+      await postJson(api.prpSelection, { session_id: sessionId });
+      clearPendingPrintRequest();
+      state.session.file = {};
+      state.session.doneResult = null;
+      state.printing = {};
+      state.sessionPhase = "identity_ready";
+      saveSessionState();
+      await router.go("files");
+    } finally {
+      continueInFlight = false;
     }
   }
 

@@ -10,11 +10,12 @@ class PrintAuthorizationTransportError(RuntimeError):
 
 
 class PrintAuthorizationClient:
-    def __init__(self, base_url: str, node_id: str, auth_client, timeout: int = 10):
+    def __init__(self, base_url: str, node_id: str, auth_client, timeout: int = 10, verify_ssl: bool = True):
         self.base_url = str(base_url or "").rstrip("/")
         self.node_id = str(node_id or "")
         self.auth_client = auth_client
         self.timeout = timeout
+        self.verify_ssl = bool(verify_ssl)
 
     def authorize(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = self.auth_client.get_auth_headers()
@@ -27,6 +28,7 @@ class PrintAuthorizationClient:
                 url,
                 json=payload,
                 headers=headers,
+                verify=self.verify_ssl,
                 timeout=self.timeout,
             )
             result = response.json()

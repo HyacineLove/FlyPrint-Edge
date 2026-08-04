@@ -61,6 +61,27 @@ class ConfigServiceTests(unittest.TestCase):
         self.assertIn("settings.max_document_pages must be an integer >= 0", errors)
         self.assertIn("settings.max_list_items must be an integer >= 0", errors)
 
+    def test_validate_rejects_non_loopback_bind_address(self):
+        errors = self.service.validate({
+            "cloud": {}, "settings": {},
+            "network": {"bind_address": "0.0.0.0", "port": 7860},
+        })
+        self.assertIn("network.bind_address must be loopback-only", errors)
+
+    def test_validate_accepts_ipv6_loopback(self):
+        errors = self.service.validate({
+            "cloud": {}, "settings": {},
+            "network": {"bind_address": "::1", "port": 7860},
+        })
+        self.assertNotIn("network.bind_address must be loopback-only", errors)
+
+    def test_validate_rejects_hostname_even_if_it_usually_resolves_locally(self):
+        errors = self.service.validate({
+            "cloud": {}, "settings": {},
+            "network": {"bind_address": "localhost", "port": 7860},
+        })
+        self.assertIn("network.bind_address must be loopback-only", errors)
+
 
 if __name__ == "__main__":
     unittest.main()

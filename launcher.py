@@ -93,10 +93,11 @@ def resolve_runtime_config(install_dir: Path) -> dict:
 def resolve_local_base_url(config: dict) -> str:
     network = config.get("network", {})
     host = str(network.get("bind_address") or "127.0.0.1").strip()
-    if host in {"0.0.0.0", "::"}:
-        host = "127.0.0.1"
+    if host not in {"127.0.0.1", "::1"}:
+        raise ValueError("network.bind_address must be 127.0.0.1 or ::1")
     port = int(network.get("port") or 7860)
-    return f"http://{host}:{port}"
+    url_host = f"[{host}]" if ":" in host else host
+    return f"http://{url_host}:{port}"
 
 
 def is_cloud_activated(config: dict) -> bool:

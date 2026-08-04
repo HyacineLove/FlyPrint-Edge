@@ -11,7 +11,8 @@ from printing.domain import (
     PrintRequest,
     PrintState,
 )
-from printing.service import DeviceJobRegistry, IppPrintService
+from printing.service import DEVICE_JOBS, DeviceJobRegistry, IppPrintService
+from printing.ipp_protocol import IppTransportError
 
 
 class IppServiceStateTests(unittest.TestCase):
@@ -140,6 +141,17 @@ class IppServiceStateTests(unittest.TestCase):
                 )
         self.assertEqual(ErrorCode.IPP_JOB_QUERY_FAILED, raised.exception.code)
         self.assertEqual(PrintState.UNCONFIRMED, raised.exception.state)
+
+    def test_preconnect_failure_is_failed_and_does_not_lock_device(self):
+        DEVICE_JOBS.clear_uncertain(self.request.printer_uuid)
+        with patch(
+            "printing.service.probe_printer",
+            side_effect=IppTransportError("connection refused", request_sent=False),
+        ):
+            event = self.service.execute(self.request)
+        self.assertEqual(PrintState.FAILED, event.state)
+        self.assertEqual(ErrorCode.IPP_UNREACHABLE, event.error_code)
+        self.assertFalse(DEVICE_JOBS.is_uncertain(self.request.printer_uuid))
 
     def test_single_device_registry_rejects_concurrent_and_uncertain_jobs(self):
         registry = DeviceJobRegistry()

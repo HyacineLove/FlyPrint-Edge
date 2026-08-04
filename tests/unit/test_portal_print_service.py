@@ -1,6 +1,6 @@
 import logging
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from interactive_session import InteractiveSessionManager
 from portal_print_service import PortalPrintService
@@ -17,9 +17,15 @@ class RecordingPrintService:
     def __init__(self, terminal_event=None):
         self.requests = []
         self.terminal_event = terminal_event
+        self.events = []
 
     def execute(self, request, callback=None):
         self.requests.append(request)
+        if self.events:
+            for event in self.events:
+                if callback:
+                    callback(event)
+            return self.events[-1]
         event = self.terminal_event or PrintEvent(
             PrintState.COMPLETED,
             "completed",
@@ -36,9 +42,16 @@ class RecordingPrintService:
 class RecordingReporter:
     def __init__(self):
         self.reports = []
+        self.status_reports = []
 
     def queue_terminal_job_update(self, job_id, status, payload):
         self.reports.append((job_id, status, payload))
+        return True
+
+    def report_job_status(self, job_id, status, message, current_page=None, total_pages=None):
+        self.status_reports.append(
+            (job_id, status, message, current_page, total_pages)
+        )
         return True
 
 
@@ -83,6 +96,7 @@ class PortalPrintServiceTests(unittest.TestCase):
             config_repo=DummyConfig(),
             session_manager=self.sessions,
             terminal_reporter=self.reporter,
+            status_reporter=self.reporter,
             local_event_publisher=self.local_events.append,
             executor=InlineExecutor(),
             logger=logging.getLogger("test"),
@@ -131,6 +145,64 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.assertEqual("completed", self.local_events[-1]["status"])
         self.assertEqual(6, self.local_events[-1]["current_page"])
         self.assertEqual(6, self.local_events[-1]["total_pages"])
+
+    def test_allowed_portal_job_reports_nonterminal_states_to_cloud(self):
+        self.authorizer.authorize.return_value = {
+            "allowed": True,
+            "job_id": "job-1",
+            "reserved_quota": 8,
+            "quota_balance": 42,
+        }
+        self.print_service.events = [
+            PrintEvent(
+                PrintState.QUEUED,
+                "queued",
+                "job-1",
+                current_page=0,
+                total_pages=6,
+            ),
+            PrintEvent(
+                PrintState.PRINTING,
+                "printing",
+                "job-1",
+                current_page=2,
+                total_pages=6,
+            ),
+            PrintEvent(
+                PrintState.COMPLETED,
+                "completed",
+                "job-1",
+                current_page=6,
+                total_pages=6,
+                impressions_completed=6,
+            ),
+        ]
+
+        result = self.service.submit(
+            self.sessions.get_active_session(), self.printer, self.options
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            [
+                ("job-1", "queued", "queued", 0, 6),
+                ("job-1", "printing", "printing", 2, 6),
+            ],
+            self.reporter.status_reports,
+        )
+        self.assertEqual(1, len(self.reporter.reports))
+        self.assertEqual("completed", self.reporter.reports[0][1])
+
+    def test_authorized_job_bind_failure_reports_terminal_failure(self):
+        self.authorizer.authorize.return_value = {
+            "allowed": True, "job_id": "job-bind-failed",
+            "reserved_quota": 8, "quota_balance": 42,
+        }
+        with patch.object(self.sessions, "attach_authorized_job", return_value=False):
+            result = self.service.submit(self.sessions.get_active_session(), self.printer, self.options)
+        self.assertFalse(result["success"])
+        self.assertEqual("job_bind_failed", result["error_code"])
+        self.assertEqual("failed", self.reporter.reports[0][1])
 
     def test_print_request_uses_canonical_cache_only(self):
         self.authorizer.authorize.return_value = {

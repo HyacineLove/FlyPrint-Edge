@@ -134,17 +134,18 @@ class PRPEndpointTests(unittest.TestCase):
         destination = self.selections.destination_for(self.session_id, "file-1")
         self.assertFalse(Path(str(destination) + ".part").exists())
 
-    def test_clear_selection_preserves_portal_session_and_releases_preview(self):
+    def test_clear_selection_preserves_portal_session_and_keeps_session_caches(self):
         self.interactive.bind_portal_identity({
             "terminal_session_id": self.session_id, "site_portal_code": "official",
             "cloud_user_id": "cloud-1", "external_user_id": "external-1",
             "display_name": "User",
         })
         preview_manager = Mock()
+        client = _FakePRPClient()
         with patch.object(main, "interactive_session_manager", self.interactive), \
              patch.object(main, "portal_session_manager", self.portal), \
              patch.object(main, "prp_file_selection_manager", self.selections), \
-             patch.object(main, "prp_client", _FakePRPClient()), \
+             patch.object(main, "prp_client", client), \
              patch.object(main, "get_file_manager", return_value=preview_manager):
             asyncio.run(
                 main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
@@ -157,9 +158,31 @@ class PRPEndpointTests(unittest.TestCase):
         self.assertEqual("identity_ready", self.interactive.build_snapshot()["state"])
         self.assertIsNotNone(self.portal.get_access_context(self.session_id))
         self.assertEqual({}, self.selections.snapshot(self.session_id))
-        preview_manager.release_preview_resource.assert_called_once_with(
-            "file-1", reason="prp_deselect"
-        )
+        self.assertIsNotNone(self.selections.activate_cached(self.session_id, "file-1"))
+        preview_manager.release_preview_resource.assert_not_called()
+
+    def test_reselect_uses_session_source_cache_without_second_download(self):
+        client = _FakePRPClient()
+        client.download_file = Mock(wraps=client.download_file)
+        patches = [
+            patch.object(main, "interactive_session_manager", self.interactive),
+            patch.object(main, "portal_session_manager", self.portal),
+            patch.object(main, "prp_file_selection_manager", self.selections),
+            patch.object(main, "prp_client", client),
+            patch.object(main, "get_file_manager", return_value=Mock()),
+        ]
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            first = asyncio.run(
+                main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
+            )
+            self.assertTrue(first["success"])
+            asyncio.run(main.clear_prp_selection(_Request({"session_id": self.session_id})))
+            second = asyncio.run(
+                main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
+            )
+
+        self.assertTrue(second["success"])
+        client.download_file.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -90,7 +90,7 @@ def cleanup_temp_dir(max_age_hours=24):
             except OSError:
                 pass
 
-    for subtree in (temp_dir / "downloads", temp_dir / "ipp-printing" / "jobs"):
+    for subtree in (temp_dir / "downloads", temp_dir / "ipp-printing" / "jobs", temp_dir / "prp-selections"):
         if not subtree.is_dir():
             continue
         directories = sorted(

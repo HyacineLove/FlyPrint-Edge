@@ -11,6 +11,7 @@ export function renderDoneView() {
       <div id="77_17" class="Pixso-rectangle-77_17"></div>
       <p id="77_18" class="Pixso-paragraph-77_18"></p>
       <p id="77_21" class="Pixso-paragraph-77_21"></p>
+      <button id="115_43" class="done-continue-button" type="button" hidden>继续选择文件</button>
       <div id="115_40" class="Pixso-group-115_40" style="cursor: pointer;">
         <div id="115_41" class="Pixso-rectangle-115_41 fill-primary-gradient"></div>
         <p id="115_42" class="Pixso-paragraph-115_42"></p>
@@ -26,8 +27,16 @@ export function renderDoneView() {
 `;
 }
 
-export function bindDoneViewEvents({ appState, restartCycle }) {
+export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) {
   const result = appState.session.doneResult || { type: "success", message: "" };
+  const canContinueToFiles = Boolean(
+    result.type === "success" &&
+    appState.session?.session_id &&
+    appState.session?.file?.source_origin === "prp",
+  );
+  const continueButton = document.getElementById("115_43");
+  if (continueButton) continueButton.hidden = !canContinueToFiles;
+  let continueInFlight = false;
   let availabilityPollTimer = null;
   const printerFaultCodes = new Set([
     "printer_fault",
@@ -120,6 +129,7 @@ export function bindDoneViewEvents({ appState, restartCycle }) {
   setText(["115_39"], String(countdownValue));
 
   const leave = () => {
+    if (continueInFlight) return;
     if (countdownTimer) {
       window.clearInterval(countdownTimer);
       countdownTimer = null;
@@ -127,15 +137,33 @@ export function bindDoneViewEvents({ appState, restartCycle }) {
     void restartCycle();
   };
 
+  const continueSelection = async () => {
+    if (!canContinueToFiles || !continueToFiles || continueInFlight) return;
+    continueInFlight = true;
+    if (continueButton) continueButton.disabled = true;
+    try {
+      await continueToFiles();
+      if (countdownTimer) {
+        window.clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+    } catch (error) {
+      continueInFlight = false;
+      if (continueButton) continueButton.disabled = false;
+      setText(["77_21"], error?.message || "暂时无法返回文件列表，请稍后重试");
+    }
+  };
+
   let countdownTimer = window.setInterval(() => {
     countdownValue = Math.max(0, countdownValue - 1);
     setText(["115_39"], String(countdownValue));
-    if (countdownValue === 0) {
+    if (countdownValue === 0 && !continueInFlight) {
       leave();
     }
   }, 1000);
 
   on("115_40", () => leave());
+  on("115_43", () => void continueSelection());
 
   return {
     destroy() {

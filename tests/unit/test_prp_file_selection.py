@@ -35,6 +35,19 @@ class PRPFileSelectionManagerTests(unittest.TestCase):
         self.assertFalse(source.exists())
         self.assertFalse(source.parent.exists())
 
+    def test_release_selection_keeps_source_for_same_session_reselect(self):
+        source = self.manager.destination_for("session-1", "file-1")
+        source.write_bytes(b"source")
+        self.manager.bind("session-1", self._metadata("file-1"), source)
+
+        self.assertEqual("file-1", self.manager.release_selection("session-1"))
+        self.assertIsNone(self.manager.get_source("session-1", "file-1"))
+        cached = self.manager.activate_cached("session-1", "file-1")
+
+        self.assertIsNotNone(cached)
+        self.assertEqual("file-1", cached["file_id"])
+        self.assertEqual(source, self.manager.get_source("session-1", "file-1"))
+
     def test_public_snapshot_never_exposes_local_path_or_access_token(self):
         source = self.manager.destination_for("session-1", "file-1")
         source.write_bytes(b"source")

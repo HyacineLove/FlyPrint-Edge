@@ -218,6 +218,33 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   transform: translateX(-50%);
 }
 
+.done-continue-button {
+  width: 418px;
+  height: 90px;
+  position: absolute;
+  left: 50%;
+  top: 1585px;
+  transform: translateX(-50%);
+  border: 2px solid rgba(37, 115, 255, 1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 1);
+  color: rgba(37, 115, 255, 1);
+  font-size: 34px;
+  font-family: "Microsoft YaHei-Bold";
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.done-continue-button:hover,
+.done-continue-button:focus-visible {
+  background: rgba(240, 246, 255, 1);
+}
+
+.done-continue-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .Pixso-rectangle-115_41 {
   width: 418px;
   height: 110px;

@@ -20,6 +20,23 @@ class FileManagerCleanupTests(unittest.TestCase):
         self.assertTrue(manager.release_preview_resource("file-1", reason="print"))
         self.assertEqual({}, preview_cache)
 
+    def test_release_preview_session_removes_only_that_session(self):
+        preview_cache = {
+            "session-1:hash-a:options": {
+                "preview_url": "data-1", "session_id": "session-1", "file_id": "file-1",
+                "timestamp": time.time(),
+            },
+            "session-2:hash-b:options": {
+                "preview_url": "data-2", "session_id": "session-2", "file_id": "file-2",
+                "timestamp": time.time(),
+            },
+        }
+        manager = FileManager(preview_cache=preview_cache)
+
+        self.assertTrue(manager.release_preview_session("session-1", reason="cancel"))
+        self.assertNotIn("session-1:hash-a:options", preview_cache)
+        self.assertIn("session-2:hash-b:options", preview_cache)
+
     def test_expired_preview_entries_are_removed(self):
         preview_cache = {
             'file-1:{"page_index": 0}': {"preview_url": "data", "timestamp": 0.0}
@@ -36,6 +53,12 @@ class FileManagerCleanupTests(unittest.TestCase):
         manager.store_file_access_token("file-2", "token-2", "2000-01-01T00:00:00Z")
         manager.cleanup_expired_tokens()
         self.assertIsNone(manager.consume_file_access_token("file-2"))
+
+    def test_file_access_token_can_be_reused_for_preview_pages(self):
+        manager = FileManager()
+        manager.store_file_access_token("file-1", "token-1", "2099-01-01T00:00:00Z")
+        self.assertEqual("token-1", manager.get_file_access_token("file-1"))
+        self.assertEqual("token-1", manager.get_file_access_token("file-1"))
 
     def test_release_print_artifact_removes_source_and_converted_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -91,6 +114,7 @@ class FileManagerCleanupTests(unittest.TestCase):
                 root / "preview-source.bin",
                 root / "downloads" / "job" / "source.pdf",
                 root / "ipp-printing" / "jobs" / "job.pdf",
+                root / "prp-selections" / "session-1" / "source.pdf.source",
             ]
             preserved = [
                 root / "ipp-printing" / "document-cache" / "canonical.pdf",

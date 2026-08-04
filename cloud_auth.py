@@ -6,6 +6,7 @@ fly-print-cloud OAuth2认证客户端
 import logging
 import requests
 import time
+import threading
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
@@ -22,6 +23,7 @@ class CloudAuthClient:
         self.verify_ssl = verify_ssl
         self.access_token = None
         self.token_expires_at = None
+        self._refresh_lock = threading.Lock()
         
     def get_access_token(self) -> Optional[str]:
         """获取有效的access token，如果过期则自动刷新"""
@@ -40,6 +42,12 @@ class CloudAuthClient:
     
     def _refresh_token(self) -> Optional[str]:
         """刷新access token"""
+        with self._refresh_lock:
+            if self._is_token_valid():
+                return self.access_token
+            return self._refresh_token_locked()
+
+    def _refresh_token_locked(self) -> Optional[str]:
         try:
             logger.debug("Requesting OAuth2 token: url=%s", self.auth_url)
             
