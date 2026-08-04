@@ -1433,6 +1433,7 @@ async def submit_print(request: Request):
                     session_manager=interactive_session_manager,
                     terminal_reporter=cloud_service.websocket_client,
                     status_reporter=cloud_service.websocket_client,
+                    printer_status_reporter=getattr(cloud_service, "status_reporter", None),
                     local_event_publisher=publish_local_job_status,
                     logger=logger,
                 )

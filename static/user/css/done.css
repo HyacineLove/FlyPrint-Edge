@@ -213,25 +213,27 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   width: 418px;
   height: 110px;
   position: absolute;
-  left: 50%;
+  left: 556px;
   top: 1700px;
-  transform: translateX(-50%);
+  z-index: 5;
 }
 
 .done-continue-button {
   width: 418px;
-  height: 90px;
+  height: 110px;
   position: absolute;
-  left: 50%;
-  top: 1585px;
-  transform: translateX(-50%);
+  left: 107px;
+  top: 1700px;
+  z-index: 5;
   border: 2px solid rgba(37, 115, 255, 1);
   border-radius: 20px;
   background: rgba(255, 255, 255, 1);
   color: rgba(37, 115, 255, 1);
-  font-size: 34px;
+  font-size: 50px;
   font-family: "Microsoft YaHei-Bold";
   font-weight: 700;
+  line-height: 1;
+  padding: 0;
   cursor: pointer;
 }
 

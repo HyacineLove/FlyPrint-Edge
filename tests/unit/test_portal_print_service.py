@@ -55,6 +55,15 @@ class RecordingReporter:
         return True
 
 
+class RecordingPrinterStatusReporter:
+    def __init__(self):
+        self.calls = []
+
+    def force_report_printer(self, **kwargs):
+        self.calls.append(kwargs)
+        return True
+
+
 class DummyConfig:
     def get_printer_by_id(self, printer_id):
         return {
@@ -89,6 +98,7 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.authorizer = Mock()
         self.print_service = RecordingPrintService()
         self.reporter = RecordingReporter()
+        self.printer_status_reporter = RecordingPrinterStatusReporter()
         self.local_events = []
         self.service = PortalPrintService(
             authorizer=self.authorizer,
@@ -97,11 +107,12 @@ class PortalPrintServiceTests(unittest.TestCase):
             session_manager=self.sessions,
             terminal_reporter=self.reporter,
             status_reporter=self.reporter,
+            printer_status_reporter=self.printer_status_reporter,
             local_event_publisher=self.local_events.append,
             executor=InlineExecutor(),
             logger=logging.getLogger("test"),
         )
-        self.printer = {"id": "printer-1", "cloud_id": "cloud-printer-1"}
+        self.printer = {"id": "printer-1", "cloud_id": "cloud-printer-1", "name": "HP"}
         self.options = {
             "copies": 2,
             "duplex": "longedge",
@@ -145,6 +156,60 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.assertEqual("completed", self.local_events[-1]["status"])
         self.assertEqual(6, self.local_events[-1]["current_page"])
         self.assertEqual(6, self.local_events[-1]["total_pages"])
+        self.assertEqual(
+            [("cloud-printer-1", "HP")],
+            [
+                (call["printer_id"], call["printer_name"])
+                for call in self.printer_status_reporter.calls
+            ],
+        )
+
+    def test_terminal_refresh_happens_before_next_portal_authorization(self):
+        authorizations = [
+            {"allowed": True, "job_id": "job-1", "reserved_quota": 8, "quota_balance": 42},
+            {"allowed": True, "job_id": "job-2", "reserved_quota": 2, "quota_balance": 40},
+        ]
+
+        def authorize(_payload):
+            if len(self.authorizer.authorize.call_args_list) == 2:
+                self.assertGreaterEqual(
+                    len(self.printer_status_reporter.calls),
+                    1,
+                    "the previous terminal must refresh printer status before a new authorization",
+                )
+            return authorizations.pop(0)
+
+        self.authorizer.authorize.side_effect = authorize
+
+        first = self.service.submit(self.sessions.get_active_session(), self.printer, self.options)
+        self.assertTrue(first["success"])
+        self.sessions.clear_prp_selection(self.session_id)
+        self.sessions.bind_prp_file(self.session_id, {
+            "source_origin": "prp",
+            "file_id": "file-2",
+            "file_name": "second.pdf",
+            "file_type": "application/pdf",
+            "content_hash": "b" * 64,
+            "size": 10,
+        })
+        self.sessions.set_preview_page_count(self.session_id, "file-2", 1)
+
+        second_options = {**self.options, "copies": 1}
+        self.print_service.events = [
+            PrintEvent(
+                PrintState.COMPLETED,
+                "completed",
+                "job-2",
+                current_page=1,
+                total_pages=1,
+                impressions_completed=1,
+            )
+        ]
+        second = self.service.submit(self.sessions.get_active_session(), self.printer, second_options)
+
+        self.assertTrue(second["success"])
+        self.assertEqual(2, self.authorizer.authorize.call_count)
+        self.assertGreaterEqual(len(self.printer_status_reporter.calls), 1)
 
     def test_allowed_portal_job_reports_nonterminal_states_to_cloud(self):
         self.authorizer.authorize.return_value = {

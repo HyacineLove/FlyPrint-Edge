@@ -115,6 +115,32 @@ class UserPreviewAssetTests(unittest.TestCase):
             with self.subTest(error_code=error_code):
                 self.assertIn(f"{error_code}:", runtime)
 
+    def test_portal_authorization_errors_are_user_visible(self):
+        runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
+
+        for error_code in (
+            "print_quota_insufficient",
+            "printer_unavailable",
+            "printer_capability_unsupported",
+            "terminal_session_invalid",
+            "print_confirmation_conflict",
+            "job_bind_failed",
+        ):
+            with self.subTest(error_code=error_code):
+                self.assertIn(error_code, runtime)
+
+    def test_done_action_buttons_match_preview_side_by_side_layout(self):
+        done_css = read_source(BASE_DIR / "css/done.css")
+
+        self.assertRegex(
+            done_css,
+            r"\.done-continue-button\s*\{[^}]*width:\s*418px[^}]*height:\s*110px[^}]*left:\s*107px[^}]*top:\s*1700px",
+        )
+        self.assertRegex(
+            done_css,
+            r"\.Pixso-group-115_40\s*\{[^}]*width:\s*418px[^}]*height:\s*110px[^}]*left:\s*556px[^}]*top:\s*1700px",
+        )
+
     def test_printer_fault_done_view_does_not_auto_restart_until_recovered(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
 

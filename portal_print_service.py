@@ -35,6 +35,7 @@ class PortalPrintService:
         session_manager,
         terminal_reporter,
         status_reporter,
+        printer_status_reporter=None,
         local_event_publisher=None,
         executor=None,
         logger,
@@ -45,6 +46,7 @@ class PortalPrintService:
         self.session_manager = session_manager
         self.terminal_reporter = terminal_reporter
         self.status_reporter = status_reporter
+        self.printer_status_reporter = printer_status_reporter
         self.local_event_publisher = local_event_publisher
         self.executor = executor or _EXECUTOR
         self.logger = logger
@@ -130,6 +132,7 @@ class PortalPrintService:
                 request,
                 int(session_snapshot["page_count"]),
                 normalized,
+                printer,
             )
         except Exception:
             self.logger.exception(
@@ -165,11 +168,19 @@ class PortalPrintService:
             "quota_balance": authorization.get("quota_balance"),
         }
 
-    def _execute(self, request, page_count, options):
+    def _execute(self, request, page_count, options, printer):
         terminal_seen = False
 
         def on_event(event: PrintEvent):
             nonlocal terminal_seen
+            terminal = event.state in TERMINAL_STATES
+            first_terminal = terminal and not terminal_seen
+            if first_terminal:
+                # Cloud refuses a new authorization while its printer lease is
+                # still non-idle. Refresh the physical state before publishing
+                # the terminal UI event or consuming the terminal result.
+                terminal_seen = True
+                self._refresh_printer_status(printer, event.job_id)
             payload = {
                 "job_id": event.job_id,
                 "status": event.state.value,
@@ -194,13 +205,38 @@ class PortalPrintService:
                         event.job_id,
                         event.state.value,
                     )
-            if event.state in TERMINAL_STATES and not terminal_seen:
-                terminal_seen = True
+            if first_terminal:
                 self._report_terminal(event, page_count, options)
 
         event = self.print_service.execute(request, callback=on_event)
         if event.state in TERMINAL_STATES and not terminal_seen:
             on_event(event)
+
+    def _refresh_printer_status(self, printer, job_id):
+        reporter = self.printer_status_reporter
+        if not reporter or not hasattr(reporter, "force_report_printer"):
+            return
+        try:
+            printer_id = str(printer.get("cloud_id") or printer.get("id") or "")
+            printer_name = str(printer.get("name") or "")
+            refreshed = reporter.force_report_printer(
+                printer_id=printer_id,
+                printer_name=printer_name,
+                wait=True,
+                timeout=8.0,
+            )
+            if not refreshed:
+                self.logger.warning(
+                    "post-terminal printer status refresh did not complete: job_id=%s printer_id=%s",
+                    job_id,
+                    printer_id,
+                )
+        except Exception:
+            self.logger.warning(
+                "post-terminal printer status refresh failed: job_id=%s",
+                job_id,
+                exc_info=True,
+            )
 
     def _report_terminal(self, event, page_count, options):
         payload = {
