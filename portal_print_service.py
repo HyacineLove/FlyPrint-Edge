@@ -17,7 +17,6 @@ from printing.domain import (
 
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="portal-print")
-_CONFIRMATION_NAMESPACE = uuid.UUID("52e4c294-8804-4fd2-9109-d10bcf274407")
 
 
 def shutdown_portal_executor() -> None:
@@ -65,9 +64,12 @@ class PortalPrintService:
             return {"success": False, "error_code": "print_already_submitted"}
 
         normalized = PrintOptions.from_mapping(options)
-        confirmation_id = str(
-            uuid.uuid5(_CONFIRMATION_NAMESPACE, f"{session_id}:{file_id}")
-        )
+        # A confirmation identifies one print attempt, not one source file.
+        # The session deliberately survives a successful print so the user can
+        # print the same PRP file again; deriving this value from session/file
+        # would make Cloud return the previous idempotent job and skip a new
+        # quota reservation.
+        confirmation_id = str(uuid.uuid4())
         authorization = self.authorizer.authorize({
             "confirmation_id": confirmation_id,
             "terminal_session_id": session_id,

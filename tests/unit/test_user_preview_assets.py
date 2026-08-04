@@ -131,6 +131,7 @@ class UserPreviewAssetTests(unittest.TestCase):
 
     def test_done_action_buttons_match_preview_side_by_side_layout(self):
         done_css = read_source(BASE_DIR / "css/done.css")
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
 
         self.assertRegex(
             done_css,
@@ -140,6 +141,11 @@ class UserPreviewAssetTests(unittest.TestCase):
             done_css,
             r"\.Pixso-group-115_40\s*\{[^}]*width:\s*418px[^}]*height:\s*110px[^}]*left:\s*556px[^}]*top:\s*1700px",
         )
+        self.assertRegex(
+            done_css,
+            r"\.Pixso-group-115_40\.single-action\s*\{[^}]*left:\s*331px",
+        )
+        self.assertIn("single-action", done_view)
 
     def test_printer_fault_done_view_does_not_auto_restart_until_recovered(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")

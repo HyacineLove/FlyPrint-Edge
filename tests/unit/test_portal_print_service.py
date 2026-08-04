@@ -211,6 +211,43 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.assertEqual(2, self.authorizer.authorize.call_count)
         self.assertGreaterEqual(len(self.printer_status_reporter.calls), 1)
 
+    def test_reprinting_same_file_creates_a_new_cloud_job_and_charge(self):
+        self.authorizer.authorize.side_effect = [
+            {"allowed": True, "job_id": "job-1", "reserved_quota": 8, "quota_balance": 42},
+            {"allowed": True, "job_id": "job-2", "reserved_quota": 8, "quota_balance": 34},
+        ]
+
+        first = self.service.submit(self.sessions.get_active_session(), self.printer, self.options)
+        self.assertTrue(first["success"])
+        self.sessions.clear_prp_selection(self.session_id)
+        self.sessions.bind_prp_file(self.session_id, {
+            "source_origin": "prp",
+            "file_id": "file-1",
+            "file_name": "document.pdf",
+            "file_type": "application/pdf",
+            "content_hash": "a" * 64,
+            "size": 10,
+        })
+        self.sessions.set_preview_page_count(self.session_id, "file-1", 3)
+        self.print_service.events = [
+            PrintEvent(
+                PrintState.COMPLETED,
+                "completed",
+                "job-2",
+                current_page=6,
+                total_pages=6,
+                impressions_completed=6,
+            )
+        ]
+
+        second = self.service.submit(self.sessions.get_active_session(), self.printer, self.options)
+
+        self.assertTrue(second["success"])
+        self.assertEqual(2, self.authorizer.authorize.call_count)
+        confirmation_ids = [call.args[0]["confirmation_id"] for call in self.authorizer.authorize.call_args_list]
+        self.assertNotEqual(confirmation_ids[0], confirmation_ids[1])
+        self.assertEqual(["job-1", "job-2"], [report[0] for report in self.reporter.reports])
+
     def test_allowed_portal_job_reports_nonterminal_states_to_cloud(self):
         self.authorizer.authorize.return_value = {
             "allowed": True,

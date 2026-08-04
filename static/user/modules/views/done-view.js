@@ -36,6 +36,8 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
   );
   const continueButton = document.getElementById("115_43");
   if (continueButton) continueButton.hidden = !canContinueToFiles;
+  const returnButton = document.getElementById("115_40");
+  if (returnButton) returnButton.classList.toggle("single-action", !canContinueToFiles);
   let continueInFlight = false;
   let availabilityPollTimer = null;
   const printerFaultCodes = new Set([
