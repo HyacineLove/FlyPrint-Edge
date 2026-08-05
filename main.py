@@ -756,6 +756,20 @@ def _clamp_copy_count(copies: Any, settings: Optional[Dict[str, Any]] = None) ->
     copies_min, copies_max = _normalize_copy_limits(settings)
     return min(copies_max, max(copies_min, _safe_int(copies, copies_min)))
 
+def _build_qr_runtime_settings(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    runtime_settings = settings if isinstance(settings, dict) else _get_settings()
+    copies_min, copies_max = _normalize_copy_limits(runtime_settings)
+    layout_defaults = resolve_layout_options({}, runtime_settings)
+    return {
+        "copies_min": copies_min,
+        "copies_max": copies_max,
+        **normalize_local_limits(runtime_settings),
+        "default_paper_size": layout_defaults["paper_size"],
+        "default_scale_mode": layout_defaults["scale_mode"],
+        "default_max_upscale": layout_defaults["max_upscale"],
+        "ops_contacts": _get_ops_contacts(),
+    }
+
 def _resolve_layout_options(options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return resolve_layout_options(options, _get_settings())
 
@@ -1028,9 +1042,6 @@ async def get_qr_code():
     default_printer_capabilities = None
     if default_printer and default_printer.get("name"):
         default_printer_capabilities = printer_manager.get_printer_capabilities(default_printer.get("name"))
-    copies_min, copies_max = _normalize_copy_limits()
-    local_limits = normalize_local_limits(_get_settings())
-    
     return {
         "success": True,
         "qr_url": qr_img_url, 
@@ -1040,12 +1051,7 @@ async def get_qr_code():
         "expires_at": token_data['expires_at'],
         "default_printer_id": default_printer_id,
         "default_printer_capabilities": default_printer_capabilities,
-        "settings": {
-            "copies_min": copies_min,
-            "copies_max": copies_max,
-            **local_limits,
-            "ops_contacts": _get_ops_contacts(),
-        },
+        "settings": _build_qr_runtime_settings(),
         "session_id": session["session_id"],
     }
 

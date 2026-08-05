@@ -423,6 +423,19 @@ class UserPreviewPrintApiTests(unittest.TestCase):
         self.assertEqual(500, response.status_code)
         self.assertEqual("cloud-printer-1", self.cloud_service.websocket_client.requested_printer_id)
 
+    def test_qr_runtime_settings_include_layout_defaults(self):
+        self.printer_manager.config.config["settings"].update({
+            "default_paper_size": "Letter",
+            "default_scale_mode": "fit",
+            "default_max_upscale": 1.25,
+        })
+        with patch.object(main, "printer_manager", self.printer_manager):
+            settings = main._build_qr_runtime_settings()
+
+        self.assertEqual("Letter", settings["default_paper_size"])
+        self.assertEqual("fit", settings["default_scale_mode"])
+        self.assertEqual(1.25, settings["default_max_upscale"])
+
 
 if __name__ == "__main__":
     unittest.main()

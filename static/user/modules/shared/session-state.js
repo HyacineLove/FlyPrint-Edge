@@ -1,7 +1,7 @@
 const stateKey = "fly_print_state";
 
 export const defaultPaperSize = "A4";
-export const defaultScaleMode = "actual";
+export const defaultScaleMode = "fit";
 export const defaultMaxUpscale = 3;
 
 export function createDefaultOptions() {
@@ -68,12 +68,18 @@ export function normalizeRuntimeSettings(rawSettings) {
   const maxFileSizeBytes = Math.max(0, Number.parseInt(settings.max_file_size_bytes, 10) || 0);
   const maxDocumentPages = Math.max(0, Number.parseInt(settings.max_document_pages, 10) || 0);
   const maxListItems = Math.max(0, Number.parseInt(settings.max_list_items, 10) || 0);
+  const defaultPaper = String(settings.default_paper_size || defaultPaperSize);
+  const defaultScale = normalizeScaleMode(settings.default_scale_mode || defaultScaleMode);
+  const defaultMax = normalizeMaxUpscale(settings.default_max_upscale);
   return {
     copies_min: copiesMin,
     copies_max: copiesMax,
     max_file_size_bytes: maxFileSizeBytes,
     max_document_pages: maxDocumentPages,
     max_list_items: maxListItems,
+    default_paper_size: defaultPaper,
+    default_scale_mode: defaultScale,
+    default_max_upscale: defaultMax,
     ops_contacts: normalizeOpsContacts(settings.ops_contacts),
   };
 }

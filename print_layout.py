@@ -83,7 +83,7 @@ def resolve_layout_options(
     if paper_size:
         paper_size = str(paper_size).strip()
 
-    default_scale_mode = normalize_scale_mode(defaults.get("default_scale_mode"), "actual")
+    default_scale_mode = normalize_scale_mode(defaults.get("default_scale_mode"), "fit")
     scale_mode = normalize_scale_mode(opts.get("scale_mode"), default_scale_mode)
 
     default_max_upscale = safe_float(defaults.get("default_max_upscale"), 3.0)

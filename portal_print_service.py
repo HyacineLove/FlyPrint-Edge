@@ -4,12 +4,11 @@ from concurrent.futures import ThreadPoolExecutor
 import uuid
 
 from print_quota import quota_usage
-from print_runtime import build_print_request
+from print_runtime import build_print_request, resolve_print_options
 from printing.domain import (
     ErrorCode,
     PrintError,
     PrintEvent,
-    PrintOptions,
     PrintState,
     TERMINAL_STATES,
     USER_MESSAGES,
@@ -63,7 +62,7 @@ class PortalPrintService:
         if not self.session_manager.mark_print_submitted(session_id, file_id, options):
             return {"success": False, "error_code": "print_already_submitted"}
 
-        normalized = PrintOptions.from_mapping(options)
+        normalized = resolve_print_options(self.config_repo, options)
         # A confirmation identifies one print attempt, not one source file.
         # The session deliberately survives a successful print so the user can
         # print the same PRP file again; deriving this value from session/file

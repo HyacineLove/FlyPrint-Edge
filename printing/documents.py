@@ -218,6 +218,12 @@ class DocumentPipeline:
         document_name: str,
     ) -> PreparedDocument:
         started_at = time.perf_counter()
+        self.logger.info(
+            "document_layout_options operation=print paper_size=%s scale_mode=%s max_upscale=%s",
+            options.paper_size,
+            options.scale_mode,
+            options.max_upscale,
+        )
         print_pdf = self.work_dir / f"{document_name}.pdf"
         with self.lease(canonical):
             page_count = self._layout_pdf(canonical.pdf_path, print_pdf, options)
@@ -237,6 +243,12 @@ class DocumentPipeline:
     ) -> PreviewPage:
         preview_pdf = self.work_dir / f"preview-{uuid.uuid4().hex}.pdf"
         try:
+            self.logger.info(
+                "document_layout_options operation=preview paper_size=%s scale_mode=%s max_upscale=%s",
+                options.paper_size,
+                options.scale_mode,
+                options.max_upscale,
+            )
             with self.lease(canonical):
                 page_count = self._layout_pdf(canonical.pdf_path, preview_pdf, options)
             resolved = max(0, min(int(page_index), page_count - 1))

@@ -9,6 +9,7 @@ import {
   currentSessionId,
   defaultMaxUpscale,
   defaultPaperSize,
+  defaultScaleMode,
   ensureStateOptions,
   getCopyLimitState,
   normalizeCopies,
@@ -92,15 +93,18 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     return { destroy() {} };
   }
 
+  session.runtimeSettings = normalizeRuntimeSettings(session.runtimeSettings);
+  const runtimeSettings = session.runtimeSettings;
   const initial = session.file?.print_options || {};
   session.options = {
     ...createDefaultOptions(),
     copies: initial.copies ?? 1,
-    paper_size: initial.paper_size || defaultPaperSize,
+    paper_size: initial.paper_size || runtimeSettings.default_paper_size || defaultPaperSize,
     color_mode: initial.color_mode === "grayscale" ? "mono" : (initial.color_mode || "color"),
     duplex: initial.duplex_mode === "duplex" ? "longedge" : "simplex",
+    scale_mode: initial.scale_mode || runtimeSettings.default_scale_mode || defaultScaleMode,
+    max_upscale: initial.max_upscale ?? runtimeSettings.default_max_upscale ?? defaultMaxUpscale,
   };
-  session.runtimeSettings = normalizeRuntimeSettings(session.runtimeSettings);
   session.capabilityState = createDefaultCapabilityState();
   clearPendingPrintRequest();
   ensureStateOptions();

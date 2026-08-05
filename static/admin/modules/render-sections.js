@@ -158,7 +158,7 @@ function renderSettingsSection(state) {
             ["actual", "原始尺寸/过大缩小"],
             ["fit", "适合纸张"],
             ["fill", "填满纸张"],
-          ].map(([mode, label]) => `<option value="${mode}" ${String(cfg.default_scale_mode || "actual") === mode ? "selected" : ""}>${label}</option>`).join("")}
+          ].map(([mode, label]) => `<option value="${mode}" ${String(cfg.default_scale_mode || "fit") === mode ? "selected" : ""}>${label}</option>`).join("")}
         </select>
       </div>
       <div class="field">

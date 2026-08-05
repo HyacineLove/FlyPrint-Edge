@@ -73,6 +73,15 @@ class DummyConfig:
             "ipp_uri": "ipp://printer.local/ipp/print",
         }
 
+    def get_full_config(self):
+        return {
+            "settings": {
+                "default_paper_size": "Letter",
+                "default_scale_mode": "actual",
+                "default_max_upscale": 1.25,
+            }
+        }
+
 
 class PortalPrintServiceTests(unittest.TestCase):
     def setUp(self):
@@ -163,6 +172,27 @@ class PortalPrintServiceTests(unittest.TestCase):
                 for call in self.printer_status_reporter.calls
             ],
         )
+
+    def test_layout_defaults_are_shared_by_authorization_and_local_print(self):
+        self.authorizer.authorize.return_value = {
+            "allowed": True,
+            "job_id": "job-layout-defaults",
+            "reserved_quota": 12,
+            "quota_balance": 47,
+        }
+        options = {"copies": 2, "duplex": "simplex", "color_mode": "color"}
+
+        result = self.service.submit(
+            self.sessions.get_active_session(), self.printer, options
+        )
+
+        self.assertTrue(result["success"])
+        authorization_payload = self.authorizer.authorize.call_args.args[0]
+        request_options = self.print_service.requests[0].options
+        self.assertEqual("Letter", authorization_payload["paper_size"])
+        self.assertEqual("Letter", request_options.paper_size)
+        self.assertEqual("actual", request_options.scale_mode)
+        self.assertEqual(1.25, request_options.max_upscale)
 
     def test_terminal_refresh_happens_before_next_portal_authorization(self):
         authorizations = [

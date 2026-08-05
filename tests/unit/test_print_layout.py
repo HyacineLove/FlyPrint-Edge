@@ -35,10 +35,10 @@ class PrintLayoutTests(unittest.TestCase):
             layout,
         )
 
-    def test_default_scale_mode_is_actual_size_shrink_only(self):
+    def test_default_scale_mode_is_fit_when_not_configured(self):
         layout = resolve_layout_options({}, {})
 
-        self.assertEqual("actual", layout["scale_mode"])
+        self.assertEqual("fit", layout["scale_mode"])
 
     def test_paper_size_px_preserves_landscape_suffix(self):
         portrait = paper_size_px("A4", dpi=120)

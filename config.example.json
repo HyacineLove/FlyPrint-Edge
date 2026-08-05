@@ -3,7 +3,7 @@
     "managed_printers": [],
     "settings": {
         "default_paper_size": "A4",
-        "default_scale_mode": "actual",
+        "default_scale_mode": "fit",
         "default_max_upscale": 3.0,
         "copies_min": 1,
         "copies_max": 3,

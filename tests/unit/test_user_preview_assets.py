@@ -413,13 +413,19 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertNotIn("print_spooler_error", runtime)
         self.assertIn("无法确认本次打印结果，请勿重复提交", runtime)
 
-    def test_default_scale_mode_is_actual_size_shrink_only_in_frontend(self):
+    def test_preview_uses_runtime_layout_defaults(self):
         session_state = read_source(BASE_DIR / "modules/shared/session-state.js")
         admin_settings = read_source("static/admin/modules/render-sections.js")
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        main = read_source("main.py")
 
-        self.assertIn('defaultScaleMode = "actual"', session_state)
+        self.assertIn('defaultScaleMode = "fit"', session_state)
         self.assertIn("原始尺寸/过大缩小", admin_settings)
-        self.assertIn('cfg.default_scale_mode || "actual"', admin_settings)
+        self.assertIn('cfg.default_scale_mode || "fit"', admin_settings)
+        self.assertIn("default_scale_mode", main)
+        self.assertIn("default_max_upscale", main)
+        self.assertIn("runtimeSettings.default_scale_mode", preview_view)
+        self.assertIn("runtimeSettings.default_max_upscale", preview_view)
 
     def test_printing_indicator_is_full_width_and_uses_device_page_progress(self):
         view = read_source(BASE_DIR / "modules/views/printing-view.js")
