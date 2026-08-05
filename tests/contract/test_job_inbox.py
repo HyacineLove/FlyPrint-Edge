@@ -79,7 +79,7 @@ class JobDeliveryStoreTests(unittest.TestCase):
         self.assertEqual(len(reports), 1)
         return reports[0]
 
-    def test_recover_interrupted_integration_job_keeps_terminal_context(self):
+    def test_recover_interrupted_site_portal_job_keeps_terminal_context(self):
         with tempfile.TemporaryDirectory() as directory:
             client = CloudWebSocketClient(
                 "ws://example.invalid",
@@ -94,7 +94,6 @@ class JobDeliveryStoreTests(unittest.TestCase):
                         "job_id": "job-int-1",
                         "terminal_session_id": "session-1",
                         "terminal_ticket_hash": "a" * 64,
-                        "integration_request_id": "request-1",
                     },
                 }
                 client.job_delivery_store.receive("job-int-1", "message-1", payload)
@@ -105,7 +104,6 @@ class JobDeliveryStoreTests(unittest.TestCase):
                 self.assertEqual(report["error_code"], "edge_restart_result_unknown")
                 self.assertEqual(report["terminal_session_id"], "session-1")
                 self.assertEqual(report["terminal_ticket_hash"], "a" * 64)
-                self.assertEqual(report["integration_request_id"], "request-1")
                 self.assertTrue(report.get("event_id"))
             finally:
                 client.stop()
@@ -128,7 +126,6 @@ class JobDeliveryStoreTests(unittest.TestCase):
                 self.assertEqual(report["error_code"], "edge_restart_result_unknown")
                 self.assertNotIn("terminal_session_id", report)
                 self.assertNotIn("terminal_ticket_hash", report)
-                self.assertNotIn("integration_request_id", report)
             finally:
                 client.stop()
 

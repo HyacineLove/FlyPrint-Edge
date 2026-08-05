@@ -16,7 +16,6 @@ class InteractiveSessionManager:
         upload_token: Optional[str] = None,
         terminal_ticket: Optional[str] = None,
         entry_type: str = "official",
-        integration_request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             session_id = uuid.uuid4().hex
@@ -25,7 +24,6 @@ class InteractiveSessionManager:
                 "upload_token": upload_token,
                 "terminal_ticket_hash": hashlib.sha256(terminal_ticket.encode("utf-8")).hexdigest() if terminal_ticket else None,
                 "entry_type": entry_type,
-                "integration_request_id": integration_request_id,
                 "site_portal_code": None,
                 "cloud_user_id": None,
                 "external_user_id": None,
@@ -180,7 +178,6 @@ class InteractiveSessionManager:
         if incoming_session_id != self._active_session.get("session_id"):
             return False
         incoming_ticket_hash = data.get("terminal_ticket_hash")
-        incoming_request_id = data.get("integration_request_id")
         if not isinstance(incoming_ticket_hash, str) or len(incoming_ticket_hash) != 64:
             return False
         if any(char not in "0123456789abcdef" for char in incoming_ticket_hash):
@@ -188,11 +185,7 @@ class InteractiveSessionManager:
         ticket_hash = self._active_session.get("terminal_ticket_hash")
         if ticket_hash and incoming_ticket_hash != ticket_hash:
             return False
-        return (
-            not self._active_session.get("integration_request_id")
-            or incoming_request_id == self._active_session.get("integration_request_id")
-        )
-
+        return True
     def apply_occupied(self, data: Dict[str, Any]) -> bool:
         """Bind ticket proof from Cloud terminal_occupied onto the active session.
 
@@ -234,24 +227,6 @@ class InteractiveSessionManager:
             self._active_session["occupied_expires_at"] = None
             self._active_session["updated_at"] = time.time()
 
-    def bind_integration_request(self, data: Dict[str, Any]) -> bool:
-        """Bind a Cloud request id only after its ticket/session proof matches."""
-        with self._lock:
-            if not self._active_session or not self._matches_terminal_context(data):
-                return False
-            request_id = data.get("integration_request_id")
-            if not request_id:
-                return False
-            current = self._active_session.get("integration_request_id")
-            if current and current != request_id:
-                return False
-            if not self._active_session.get("terminal_ticket_hash"):
-                self._active_session["terminal_ticket_hash"] = data["terminal_ticket_hash"]
-                self._active_session["entry_type"] = "integration"
-            self._active_session["integration_request_id"] = request_id
-            self._active_session["updated_at"] = time.time()
-            return True
-
     def accept_preview_event(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         file_id = data.get("file_id")
         file_url = data.get("file_url")
@@ -263,17 +238,6 @@ class InteractiveSessionManager:
                 return None
             if not self._matches_terminal_context(data):
                 return None
-
-            # integration 绑定并入同一锁内执行，避免与上下文校验之间的 TOCTOU
-            request_id = data.get("integration_request_id")
-            if request_id:
-                current = self._active_session.get("integration_request_id")
-                if current and current != request_id:
-                    return None
-                if not self._active_session.get("terminal_ticket_hash"):
-                    self._active_session["terminal_ticket_hash"] = data.get("terminal_ticket_hash")
-                self._active_session["integration_request_id"] = request_id
-                self._active_session["entry_type"] = "integration"
 
             current_file_id = self._active_session.get("file_id")
             if current_file_id and current_file_id != file_id:
@@ -430,12 +394,11 @@ class InteractiveSessionManager:
             if not self._active_session:
                 return None
             # Job status is already bound by job_id; enforce terminal proof only
-            # when Cloud includes it (integration path). Bare official updates pass.
+            # when Cloud includes it. Bare official updates pass.
             if any(
                 (
                     data.get("terminal_session_id"),
                     data.get("terminal_ticket_hash"),
-                    data.get("integration_request_id"),
                 )
             ) and not self._matches_terminal_context(data):
                 return None

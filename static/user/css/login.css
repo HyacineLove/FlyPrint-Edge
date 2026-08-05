@@ -349,35 +349,25 @@ span {
   pointer-events: none;
 }
 
-.user-toast {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 320px;
-  max-width: calc(100vw - 80px);
-  padding: 18px 24px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.96);
-  color: rgba(35, 35, 35, 1);
-  box-shadow: 0 14px 32px rgba(61, 72, 130, 0.18);
-  font-family: "Microsoft YaHei-Regular";
-  font-size: 30px;
-  line-height: 1.35;
-  text-align: center;
-  z-index: 1000;
+.ui-action-trigger {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
 }
 
-.user-toast.is-info {
-  border: 1px solid rgba(136, 160, 255, 0.35);
+/* Keep the refresh action anchored to the lower action slot of the QR card. */
+.Pixso-group-3_28.ui-action-trigger {
+  display: block;
+  position: absolute;
+  left: 204px;
+  top: 724px;
+  margin: 0;
+  transform: none;
 }
 
-.user-toast.is-success {
-  border: 1px solid rgba(73, 187, 120, 0.4);
-}
-
-.user-toast.is-error {
-  border: 1px solid rgba(245, 106, 106, 0.38);
+.Pixso-group-77_54 .ui-countdown-ring {
+  animation: ui-countdown-spin 1.2s linear infinite;
 }
 
 @keyframes countdown-spin {

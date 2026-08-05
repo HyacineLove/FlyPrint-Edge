@@ -1,4 +1,5 @@
 import { api, getJson, postJson } from "../shared/api.js";
+import { createMainCountdown } from "../shared/countdown.js";
 import { createRequestGate } from "../shared/request-gate.js";
 import { saveSessionState } from "../shared/session-state.js";
 
@@ -12,7 +13,6 @@ const SUPPORTED_MEDIA_TYPES = new Set([
   "image/jpeg",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
-
 function fileTypeLabel(mediaType) {
   if (mediaType === "application/pdf") return "PDF";
   if (mediaType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "DOCX";
@@ -44,30 +44,23 @@ export function normalizePRPFilePage(payload) {
 
 export function renderPRPFilesView() {
   return `
-<div class="files-terminal-shell">
-  <main id="filesView" class="files-terminal-card" aria-labelledby="filesGreeting">
+<div class="files-terminal-shell fill-bg-gradient">
+  <main id="filesView" class="files-view" aria-labelledby="filesGreeting">
     <header class="files-header">
-      <div>
-        <p class="files-eyebrow">Site Portal 登录成功</p>
-        <h1 id="filesGreeting">请选择打印文件</h1>
-        <p class="files-helper">文件将由当前 PRP 安全传输至本终端预览</p>
+      <div class="files-header-title-row">
+        <h1 id="filesGreeting">请选择文件</h1>
+        <button id="filesRefresh" class="files-refresh ui-pager-button" type="button">刷新</button>
       </div>
-      <div class="files-countdown" aria-label="会话剩余时间">
-        <strong id="filesCountdown">60</strong>
-        <span>秒后退出</span>
+      <div class="files-countdown ui-main-countdown" data-countdown-phase="idle" aria-label="会话剩余时间">
+        <span class="ui-countdown-ring" aria-hidden="true"></span>
+        <strong id="filesCountdown" class="ui-countdown-value">—</strong>
       </div>
+      <p id="filesClock" class="files-clock">2025/01/01 10:00:00</p>
     </header>
 
     <section id="filesPanel" class="files-panel" aria-busy="true">
       <div class="files-panel-heading">
-        <div>
-          <h2>可打印文件</h2>
-          <p id="filesStatus" class="files-status" aria-live="polite">正在读取文件…</p>
-        </div>
-        <div class="files-panel-actions">
-          <span id="filesTotal" class="files-total">0 个文件</span>
-          <button id="filesRefresh" class="files-refresh" type="button">刷新</button>
-        </div>
+        <p id="filesStatus" class="files-status" aria-live="polite"></p>
       </div>
       <div id="filesList" class="files-list" role="list"></div>
       <div class="files-pager" aria-label="文件列表分页">
@@ -77,8 +70,9 @@ export function renderPRPFilesView() {
       </div>
     </section>
 
-    <button id="filesExit" class="files-exit" type="button">返回二维码</button>
-    <p class="files-security-note">退出或倒计时结束后，本次登录与文件访问凭证将失效</p>
+    <div class="ui-action-region files-action-region files-action-region--single is-single">
+      <button id="filesExit" class="files-exit ui-action-button ui-action-button--primary" type="button">返回首页</button>
+    </div>
   </main>
 </div>`;
 }
@@ -90,12 +84,11 @@ export function createPRPFilesRefreshHandler(getCurrentPage, load) {
 export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   let currentPage = 1;
   let pageCount = 1;
-  let countdownValue = 60;
-  let countdownTimer = null;
+  let loading = false;
+  let filesFailureMode = false;
   let exiting = false;
   const sessionId = appState.session.session_id;
   const requestGate = createRequestGate();
-  const view = document.getElementById("filesView");
   const panel = document.getElementById("filesPanel");
   const status = document.getElementById("filesStatus");
   const list = document.getElementById("filesList");
@@ -103,27 +96,48 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   const previous = document.getElementById("filesPrev");
   const next = document.getElementById("filesNext");
   const refresh = document.getElementById("filesRefresh");
+  const exit = document.getElementById("filesExit");
   const countdown = document.getElementById("filesCountdown");
-  greeting.textContent = `${appState.session.identity?.display_name || "用户"}，请选择打印文件`;
+  const countdownContainer = document.querySelector(".files-countdown");
+  const mainCountdown = createMainCountdown({
+    render: (value, phase) => {
+      countdown.textContent = String(value);
+      if (countdownContainer) countdownContainer.dataset.countdownPhase = phase;
+    },
+  });
+  const startCountdown = (seconds, action) => mainCountdown.start(seconds, action);
+  greeting.textContent = `${appState.session.identity?.display_name || "用户"}，请选择文件`;
 
-  function resetCountdown() {
-    countdownValue = 60;
-    countdown.textContent = String(countdownValue);
+  function beginLoading() {
+    loading = true;
+    mainCountdown.stop("loading");
+    setBusy(true);
   }
 
-  function stopCountdown() {
-    if (!countdownTimer) return;
-    window.clearInterval(countdownTimer);
-    countdownTimer = null;
+  function endLoading({ releaseControls = true, retry = false, action = exitToQrCode } = {}) {
+    loading = false;
+    if (!releaseControls) return;
+    setBusy(false);
+    if (retry) {
+      startCountdown(10, action);
+    } else {
+      startCountdown(60, action);
+    }
   }
 
   function setBusy(busy) {
     panel.setAttribute("aria-busy", busy ? "true" : "false");
-    previous.disabled = busy || currentPage <= 1;
-    next.disabled = busy || currentPage >= pageCount;
+    panel.classList.toggle("is-loading", busy);
+    previous.disabled = busy || filesFailureMode || currentPage <= 1;
+    next.disabled = busy || filesFailureMode || currentPage >= pageCount;
     refresh.disabled = busy;
+    exit.disabled = busy;
+    refresh.classList.toggle("is-loading", busy);
+    exit.classList.toggle("is-loading", busy);
     list.querySelectorAll(".files-item").forEach((item) => {
-      item.disabled = busy;
+      item.disabled = busy || filesFailureMode;
+      item.classList.toggle("is-loading", busy);
+      item.classList.toggle("is-business-locked", filesFailureMode && !busy);
     });
   }
 
@@ -134,18 +148,19 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   async function exitToQrCode() {
     if (exiting) return;
     exiting = true;
-    stopCountdown();
+    mainCountdown.stop();
     requestGate.cancel();
-    setBusy(true);
+    beginLoading();
     await restartCycle();
   }
 
   async function load(page) {
     const request = requestGate.start();
     if (!request) return;
-    resetCountdown();
-    setBusy(true);
-    status.textContent = "正在读取文件…";
+    filesFailureMode = false;
+    let loaded = false;
+    beginLoading();
+    status.textContent = "";
     list.replaceChildren();
     try {
       const data = normalizePRPFilePage(await getJson(
@@ -153,11 +168,12 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
         { signal: request.signal },
       ));
       if (!sessionIsCurrent(request)) return;
+      filesFailureMode = false;
+      loaded = true;
       currentPage = data.page;
       pageCount = Math.max(1, Math.ceil(data.total / data.page_size));
       document.getElementById("filesPage").textContent = `${currentPage} / ${pageCount}`;
-      document.getElementById("filesTotal").textContent = `${data.total} 个文件`;
-      status.textContent = data.items.length ? "" : "暂无可用文件，请先在 Site Portal 上传 PDF。";
+      status.textContent = data.items.length ? "" : "暂无文件，请先上传";
       for (const item of data.items) {
         const row = document.createElement("button");
         row.type = "button";
@@ -184,19 +200,27 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       }
     } catch (error) {
       if (sessionIsCurrent(request) && error?.name !== "AbortError") {
-        status.textContent = error.message || "文件读取失败，请稍后重试。";
+        filesFailureMode = true;
+        const reason = String(error?.message || "请稍后重试。").trim();
+        status.textContent = `文件列表获取失败：${reason}`;
       }
     } finally {
-      if (requestGate.finish(request)) setBusy(false);
+      if (requestGate.finish(request)) {
+        endLoading({
+          retry: !loaded,
+          action: loaded ? exitToQrCode : () => load(page),
+        });
+      }
     }
   }
 
-  async function select(item, button) {
+  async function select(item) {
     const request = requestGate.start();
     if (!request) return;
-    resetCountdown();
-    setBusy(true);
-    status.textContent = "正在下载并准备文件…";
+    filesFailureMode = false;
+    let selected = false;
+    beginLoading();
+    status.textContent = "";
     try {
       const result = await postJson(`${api.prpFiles}/${encodeURIComponent(item.id)}/select`, {
         session_id: sessionId,
@@ -210,34 +234,35 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       };
       appState.sessionPhase = "preview_ready";
       saveSessionState();
+      selected = true;
       requestGate.finish(request);
+      endLoading({ releaseControls: false });
       await router.go("preview");
     } catch (error) {
       if (sessionIsCurrent(request) && error?.name !== "AbortError") {
-        status.textContent = error.message || "文件选择失败。";
+        filesFailureMode = true;
+        const reason = String(error?.message || "请稍后重试").trim();
+        status.textContent = `选择文件失败：${reason}`;
       }
     } finally {
-      if (requestGate.finish(request)) setBusy(false);
+      if (requestGate.finish(request)) {
+        endLoading({
+          retry: !selected,
+          action: selected ? exitToQrCode : () => select(item),
+        });
+      }
     }
   }
 
-  const onViewInteraction = () => resetCountdown();
-  view.addEventListener("pointerdown", onViewInteraction);
   previous.onclick = () => void load(currentPage - 1);
   next.onclick = () => void load(currentPage + 1);
   refresh.onclick = createPRPFilesRefreshHandler(() => currentPage, load);
-  document.getElementById("filesExit").onclick = () => void exitToQrCode();
-  countdownTimer = window.setInterval(() => {
-    countdownValue = Math.max(0, countdownValue - 1);
-    countdown.textContent = String(countdownValue);
-    if (countdownValue === 0) void exitToQrCode();
-  }, 1000);
+  exit.onclick = () => void exitToQrCode();
   void load(1);
   return {
     destroy() {
-      stopCountdown();
+      mainCountdown.destroy();
       requestGate.cancel();
-      view.removeEventListener("pointerdown", onViewInteraction);
     },
   };
 }

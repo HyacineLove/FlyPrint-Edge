@@ -27,11 +27,11 @@ from job_delivery_store import JobDeliveryStore
 
 logger = logging.getLogger(__name__)
 
-_TERMINAL_CONTEXT_KEYS = ("terminal_session_id", "terminal_ticket_hash", "integration_request_id")
+_TERMINAL_CONTEXT_KEYS = ("terminal_session_id", "terminal_ticket_hash")
 
 
 def _terminal_context_from_print_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract integration terminal fields from a persisted print_job message."""
+    """Extract terminal proof fields from a persisted print_job message."""
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):
         return {}
@@ -614,7 +614,6 @@ class CloudWebSocketClient:
                 "terminal_session_id": session.get("session_id") or "",
                 "terminal_ticket_hash": session.get("terminal_ticket_hash") or "",
                 "entry_type": session.get("entry_type") or "",
-                "integration_request_id": session.get("integration_request_id") or "",
             },
         }
         return self.send_message_sync(message)

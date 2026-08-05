@@ -184,6 +184,30 @@ class PRPEndpointTests(unittest.TestCase):
         self.assertTrue(second["success"])
         client.download_file.assert_called_once()
 
+    def test_clear_selection_is_idempotent_after_response_was_lost(self):
+        self.interactive.bind_portal_identity({
+            "terminal_session_id": self.session_id, "site_portal_code": "official",
+            "cloud_user_id": "cloud-1", "external_user_id": "external-1",
+            "display_name": "User",
+        })
+        with patch.object(main, "interactive_session_manager", self.interactive), \
+             patch.object(main, "portal_session_manager", self.portal), \
+             patch.object(main, "prp_file_selection_manager", self.selections), \
+             patch.object(main, "prp_client", _FakePRPClient()):
+            asyncio.run(
+                main.select_prp_file("file-1", _Request({"session_id": self.session_id}))
+            )
+            first = asyncio.run(
+                main.clear_prp_selection(_Request({"session_id": self.session_id}))
+            )
+            second = asyncio.run(
+                main.clear_prp_selection(_Request({"session_id": self.session_id}))
+            )
+
+        self.assertTrue(first["success"])
+        self.assertTrue(second["success"])
+        self.assertEqual("identity_ready", second["state"])
+
 
 if __name__ == "__main__":
     unittest.main()

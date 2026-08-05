@@ -9,9 +9,6 @@ import {
   state,
 } from "./session-state.js";
 
-export const loginQrRetryIntervalMs = 10000;
-export const loginQrRetryCountdownSeconds = 10;
-export const previewFailureFallbackSeconds = 10;
 
 export function formatOpsContactsFooter(contacts) {
   if (!Array.isArray(contacts) || contacts.length === 0) return "";
@@ -90,7 +87,7 @@ export function nowText() {
 }
 
 export function tickClock() {
-  setText(["97_161", "97_450", "115_21"], nowText());
+  setText(["97_161", "97_450", "115_21", "filesClock"], nowText());
 }
 
 export function startClockLoop() {

@@ -285,17 +285,6 @@ def _enrich_message_with_session(message: Dict[str, Any]) -> Optional[Dict[str, 
         accepted = interactive_session_manager.accept_preview_event(payload)
         active = interactive_session_manager.get_active_session() or {}
         if not accepted:
-            # Duplicate same-file integration preview must still refresh Cloud bind
-            # so TerminalDispatcher stops reclaiming every ~5s.
-            if (
-                active
-                and payload.get("integration_request_id")
-                and active.get("integration_request_id") == payload.get("integration_request_id")
-                and active.get("file_id") == payload.get("file_id")
-            ):
-                _report_terminal_session_state(active)
-            else:
-                logger.debug(" 丢弃未绑定到当前会话的 preview_file 事件")
             return None
         _report_terminal_session_state(active if active else interactive_session_manager.get_active_session())
         enriched = dict(message)
@@ -371,11 +360,6 @@ def _enrich_message_with_session(message: Dict[str, Any]) -> Optional[Dict[str, 
 def bind_interactive_cloud_job(file_url: Optional[str], job_id: Optional[str], context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     if not file_url or not job_id:
         return None
-    if context and context.get("terminal_ticket_hash"):
-        if not interactive_session_manager.bind_integration_request(context):
-            logger.warning("拒绝终端会话不匹配的集成打印任务: job_id=%s", job_id)
-            return None
-        _report_terminal_session_state(interactive_session_manager.get_active_session())
     bound = interactive_session_manager.attach_cloud_job(file_url, job_id)
     if not bound:
         return None
@@ -1193,6 +1177,19 @@ async def clear_prp_selection(request: Request):
     session_id = body.get("session_id")
     file_id = interactive_session_manager.clear_prp_selection(session_id)
     if not file_id:
+        # The first request may have completed on the Edge while its HTTP
+        # response was lost. Treat the already-cleared Site Portal session as
+        # success so the client can safely retry this transition.
+        active = interactive_session_manager.get_active_session()
+        if (
+            active
+            and active.get("session_id") == session_id
+            and active.get("entry_type") == "site_portal"
+            and active.get("state") == "identity_ready"
+            and not active.get("source_origin")
+            and not active.get("file_id")
+        ):
+            return {"success": True, "state": "identity_ready", "idempotent": True}
         return JSONResponse(
             status_code=409,
             content={"success": False, "error_code": "prp_selection_not_active"},
@@ -1472,7 +1469,6 @@ async def submit_print(request: Request):
                     "options": options,
                     "terminal_session_id": (interactive_session_manager.get_active_session() or {}).get("session_id") or "",
                     "terminal_ticket_hash": (interactive_session_manager.get_active_session() or {}).get("terminal_ticket_hash") or "",
-                    "integration_request_id": (interactive_session_manager.get_active_session() or {}).get("integration_request_id") or "",
                 }
             }
             # 使用异步发送方法

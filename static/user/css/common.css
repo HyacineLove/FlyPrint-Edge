@@ -1,0 +1,242 @@
+@font-face {
+  font-family: "Microsoft YaHei-Bold";
+  font-style: normal;
+  font-weight: 700;
+  src: url("../fonts/MSYHBD_1.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Microsoft YaHei-Regular";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../fonts/MSYH_1.ttf") format("truetype");
+}
+
+:root {
+  --ui-font-regular: "Microsoft YaHei-Regular", "Microsoft YaHei", sans-serif;
+  --ui-font-bold: "Microsoft YaHei-Bold", "Microsoft YaHei", sans-serif;
+  --ui-primary-start: #86adff;
+  --ui-primary-end: #7867f8;
+  --ui-text: #111111;
+  --ui-muted: rgba(0, 0, 0, 0.58);
+  --ui-disabled-opacity: 0.45;
+  --ui-action-width: 418px;
+  --ui-action-height: 110px;
+  --ui-action-gap: 31px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #ffffff;
+  color: var(--ui-text);
+  font-family: var(--ui-font-regular);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+ol,
+ul,
+menu {
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+span {
+  word-break: break-word;
+}
+
+.scroll-container-0_1 {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.Pixso-canvas-0_1 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.fill-bg-gradient {
+  background: linear-gradient(180deg, #e9ecff 0%, #f7f7ff 100%) !important;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+}
+
+.fill-primary-gradient {
+  background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end)) !important;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+/* Native hidden must win over generated Pixso display rules. */
+[hidden] {
+  display: none !important;
+}
+
+/* Shared main countdown: the page CSS only supplies its ring image and position. */
+.ui-main-countdown {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 51px;
+  height: 51px;
+}
+
+.ui-countdown-ring {
+  position: absolute;
+  inset: 0;
+  width: 51px;
+  height: 51px;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  transform-origin: center;
+  animation: ui-countdown-spin 1.2s linear infinite;
+}
+
+.ui-countdown-value {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3ch;
+  height: 1em;
+  color: #000000;
+  font: 400 24px/1 var(--ui-font-regular);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Shared bottom actions. A page may add a page-specific modifier only for geometry. */
+.ui-action-region {
+  position: absolute;
+  top: 1700px;
+  left: 107px;
+  z-index: 5;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  width: calc(var(--ui-action-width) * 2 + var(--ui-action-gap));
+  gap: var(--ui-action-gap);
+}
+
+.ui-action-region.is-single {
+  justify-content: center;
+}
+
+.ui-action-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-action-width);
+  height: var(--ui-action-height);
+  padding: 0 24px;
+  border-radius: 20px;
+  color: #ffffff;
+  font: 700 50px/1 var(--ui-font-bold);
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+
+.ui-action-button--primary {
+  background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end));
+}
+
+.ui-action-button--secondary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #b9bfce, #b0acd0);
+}
+
+.ui-action-button:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.992);
+}
+
+.ui-action-button:focus-visible,
+.ui-choice-button:focus-visible,
+.ui-pager-button:focus-visible {
+  outline: 4px solid rgba(110, 124, 255, 0.55);
+  outline-offset: 4px;
+}
+
+.ui-action-button:disabled,
+.ui-action-button[aria-disabled="true"],
+.ui-action-trigger:disabled,
+.ui-action-trigger[aria-disabled="true"],
+.ui-choice-button:disabled,
+.ui-choice-button[aria-disabled="true"],
+.ui-pager-button:disabled,
+.ui-pager-button[aria-disabled="true"] {
+  opacity: var(--ui-disabled-opacity);
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
+}
+
+.is-loading {
+  cursor: wait !important;
+}
+
+.is-business-locked {
+  cursor: not-allowed !important;
+}
+
+.ui-inline-status {
+  color: var(--ui-muted);
+  font: 400 30px/1.4 var(--ui-font-regular);
+  text-align: center;
+}
+
+@keyframes ui-countdown-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-main-countdown .ui-countdown-ring {
+    animation-duration: 3s;
+  }
+}

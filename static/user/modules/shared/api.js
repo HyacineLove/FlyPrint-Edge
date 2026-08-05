@@ -13,6 +13,7 @@ export const api = {
 function requestError(json, status) {
   const error = new Error(json?.message || `HTTP ${status}`);
   error.code = json?.error_code || json?.code || "";
+  error.status = status;
   return error;
 }
 

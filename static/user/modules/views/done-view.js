@@ -1,5 +1,6 @@
 import { on, setText } from "../shared/dom.js";
 import { api, getJson } from "../shared/api.js";
+import { createMainCountdown } from "../shared/countdown.js";
 
 export function renderDoneView() {
   return `
@@ -7,19 +8,23 @@ export function renderDoneView() {
   <div id="0_1" class="Pixso-canvas-0_1">
     <div id="55_158" class="Pixso-frame-55_158 fill-bg-gradient">
       <div id="115_17" class="Pixso-rectangle-115_17"></div>
+      <div id="115_18" class="Pixso-group-115_18" aria-label="剩余时间">
+        <div id="115_19" class="Pixso-vector-115_19 ui-countdown-ring"></div>
+        <p id="doneCountdown" class="Pixso-paragraph-115_20">—</p>
+      </div>
       <p id="115_21" class="Pixso-paragraph-115_21">2025/01/01 10:00:00</p>
       <div id="77_17" class="Pixso-rectangle-77_17"></div>
       <p id="77_18" class="Pixso-paragraph-77_18"></p>
       <p id="77_21" class="Pixso-paragraph-77_21"></p>
-      <button id="115_43" class="done-continue-button" type="button" hidden>继续选择文件</button>
-      <div id="115_40" class="Pixso-group-115_40" style="cursor: pointer;">
+      <button id="donePrinterRefresh" class="done-printer-refresh" type="button" hidden>刷新检测</button>
+      <button id="115_43" class="Pixso-group-115_43" type="button" hidden>
+        <div class="done-secondary-action-surface"></div>
+        <p class="Pixso-paragraph-115_45">继续选择文件</p>
+      </button>
+      <button id="115_40" class="Pixso-group-115_40 ui-action-button ui-action-button--primary" type="button">
         <div id="115_41" class="Pixso-rectangle-115_41 fill-primary-gradient"></div>
         <p id="115_42" class="Pixso-paragraph-115_42"></p>
-        <div id="115_37" class="Pixso-group-115_37">
-          <div id="115_38" class="Pixso-vector-115_38"></div>
-          <p id="115_39" class="Pixso-paragraph-115_39">10</p>
-        </div>
-      </div>
+      </button>
       <p id="115_26" class="Pixso-paragraph-115_26"></p>
     </div>
   </div>
@@ -35,11 +40,26 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     appState.session?.file?.source_origin === "prp",
   );
   const continueButton = document.getElementById("115_43");
+  continueButton?.classList.add("ui-action-button", "ui-action-button--secondary");
   if (continueButton) continueButton.hidden = !canContinueToFiles;
   const returnButton = document.getElementById("115_40");
   if (returnButton) returnButton.classList.toggle("single-action", !canContinueToFiles);
+  const refreshButton = document.getElementById("donePrinterRefresh");
+  refreshButton?.classList.add("ui-action-button", "ui-action-button--secondary");
+  const countdownElement = document.getElementById("115_18");
+  document.getElementById("115_19")?.classList.add("ui-countdown-ring");
+  document.getElementById("doneCountdown")?.classList.add("ui-countdown-value");
+  countdownElement?.classList.add("ui-main-countdown");
   let continueInFlight = false;
-  let availabilityPollTimer = null;
+  let doneLoading = false;
+  let availabilityCheckInFlight = false;
+  const mainCountdown = createMainCountdown({
+    render: (value, phase) => {
+      setText(["doneCountdown"], String(value));
+      if (countdownElement) countdownElement.dataset.countdownPhase = phase;
+    },
+  });
+  const startCountdown = (seconds, action) => mainCountdown.start(seconds, action);
   const printerFaultCodes = new Set([
     "printer_fault",
     "printer_out_of_paper",
@@ -70,109 +90,117 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     button.style.pointerEvents = enabled ? "auto" : "none";
     button.style.opacity = enabled ? "1" : "0.45";
     button.style.cursor = enabled ? "pointer" : "not-allowed";
+    button.disabled = !enabled;
+    button.classList.toggle("is-business-locked", !enabled);
+    button.setAttribute("aria-disabled", enabled ? "false" : "true");
   }
 
-  function setCountdownAccessoryVisible(visible) {
-    const accessory = document.getElementById("115_37");
-    if (accessory) accessory.style.display = visible ? "" : "none";
-    if (!visible) setText(["115_39"], "");
+  function setRefreshEnabled(enabled) {
+    if (!refreshButton) return;
+    refreshButton.disabled = !enabled;
+    refreshButton.style.pointerEvents = enabled ? "auto" : "none";
+    refreshButton.style.opacity = enabled ? "1" : "0.45";
+    refreshButton.classList.toggle("is-loading", !enabled && doneLoading);
+    refreshButton.setAttribute("aria-disabled", enabled ? "false" : "true");
+  }
+
+  function beginLoading() {
+    doneLoading = true;
+    mainCountdown.stop("loading");
+    setReturnEnabled(false);
+    setRefreshEnabled(false);
+    if (continueButton) continueButton.disabled = true;
+  }
+
+  function leave() {
+    if (continueInFlight || doneLoading) return;
+    beginLoading();
+    mainCountdown.stop();
+    void restartCycle();
+  }
+
+  async function checkPrinterAvailability() {
+    if (availabilityCheckInFlight || doneLoading) return;
+    availabilityCheckInFlight = true;
+    beginLoading();
+    try {
+      const availability = await getJson(api.printerAvailability);
+      if (!availability?.faulted) {
+        setText(["77_21"], "打印机已恢复，可返回首页继续使用");
+        setText(["115_42"], "返回首页");
+        setReturnEnabled(true);
+        setRefreshEnabled(false);
+        doneLoading = false;
+        startCountdown(10, leave);
+        return;
+      }
+      setText(["77_21"], "打印机仍需处理，请检查后重试");
+    } catch (error) {
+      setText(["77_21"], error?.message || "打印机状态检测失败，请重试");
+    } finally {
+      availabilityCheckInFlight = false;
+      if (doneLoading) {
+        doneLoading = false;
+        setReturnEnabled(false);
+        setRefreshEnabled(true);
+        startCountdown(10, checkPrinterAvailability);
+      }
+    }
+  }
+
+  async function continueSelection() {
+    if (!canContinueToFiles || !continueToFiles || continueInFlight || doneLoading) return;
+    continueInFlight = true;
+    beginLoading();
+    try {
+      await continueToFiles();
+      mainCountdown.destroy();
+    } catch (error) {
+      continueInFlight = false;
+      doneLoading = false;
+      setReturnEnabled(true);
+      if (continueButton) continueButton.disabled = false;
+      setText(["77_21"], error?.message || "暂时无法返回文件列表，请稍后重试");
+      startCountdown(10, continueSelection);
+    }
   }
 
   if (isPrinterFaultResult() || isUnconfirmedResult()) {
     const unconfirmed = isUnconfirmedResult();
     setText(["77_18"], unconfirmed ? "结果待确认" : "设备维护中");
     setText(["77_21"], result.message || (unconfirmed ? "请勿重复提交，请联系工作人员。" : "打印机故障，请联系管理员处理"));
-    setText(["115_42"], unconfirmed ? "等待管理员处理" : "等待恢复");
-    setCountdownAccessoryVisible(false);
+    setText(["115_42"], "返回首页");
+    if (refreshButton) refreshButton.hidden = false;
     setReturnEnabled(false);
-
-    const pollAvailability = async () => {
-      try {
-        const availability = await getJson(api.printerAvailability);
-        if (!availability?.faulted) {
-          if (availabilityPollTimer) {
-            window.clearInterval(availabilityPollTimer);
-            availabilityPollTimer = null;
-          }
-          setText(["77_21"], unconfirmed ? "管理员已解除锁定，可返回首页继续使用" : "打印机已恢复，可返回首页继续使用");
-          setText(["115_42"], "返回首页");
-          setCountdownAccessoryVisible(false);
-          setReturnEnabled(true);
-        }
-      } catch {
-        // Keep the locked state until a positive recovery signal is observed.
-      }
-    };
-
-    availabilityPollTimer = window.setInterval(pollAvailability, 4000);
-    void pollAvailability();
-    on("115_40", () => {
-      if (availabilityPollTimer) return;
-      void restartCycle();
-    });
-
+    setRefreshEnabled(true);
+    startCountdown(10, checkPrinterAvailability);
+    on("donePrinterRefresh", () => void checkPrinterAvailability());
+    on("115_40", () => leave());
     return {
       destroy() {
-        if (availabilityPollTimer) window.clearInterval(availabilityPollTimer);
+        mainCountdown.destroy();
       },
     };
   }
+
+  if (refreshButton) refreshButton.hidden = true;
   if (result.type === "error") {
-    setCountdownAccessoryVisible(true);
     setText(["77_18"], "打印失败");
     setText(["77_21"], result.message || "云端服务异常，请稍后重试");
+    setReturnEnabled(true);
   } else {
-    setCountdownAccessoryVisible(true);
     setText(["77_18"], "打印完成");
     setText(["77_21"], "请尽快取走您的文件");
+    setReturnEnabled(true);
+    startCountdown(10, leave);
   }
-
-  let countdownValue = 10;
-  setText(["115_39"], String(countdownValue));
-
-  const leave = () => {
-    if (continueInFlight) return;
-    if (countdownTimer) {
-      window.clearInterval(countdownTimer);
-      countdownTimer = null;
-    }
-    void restartCycle();
-  };
-
-  const continueSelection = async () => {
-    if (!canContinueToFiles || !continueToFiles || continueInFlight) return;
-    continueInFlight = true;
-    if (continueButton) continueButton.disabled = true;
-    try {
-      await continueToFiles();
-      if (countdownTimer) {
-        window.clearInterval(countdownTimer);
-        countdownTimer = null;
-      }
-    } catch (error) {
-      continueInFlight = false;
-      if (continueButton) continueButton.disabled = false;
-      setText(["77_21"], error?.message || "暂时无法返回文件列表，请稍后重试");
-    }
-  };
-
-  let countdownTimer = window.setInterval(() => {
-    countdownValue = Math.max(0, countdownValue - 1);
-    setText(["115_39"], String(countdownValue));
-    if (countdownValue === 0 && !continueInFlight) {
-      leave();
-    }
-  }, 1000);
 
   on("115_40", () => leave());
   on("115_43", () => void continueSelection());
 
   return {
     destroy() {
-      if (countdownTimer) {
-        window.clearInterval(countdownTimer);
-        countdownTimer = null;
-      }
+      mainCountdown.destroy();
     },
   };
 }

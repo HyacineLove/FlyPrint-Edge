@@ -1,4 +1,5 @@
 import { api, getJson } from "../shared/api.js";
+import { createMainCountdown } from "../shared/countdown.js";
 import { clearBg, on, q, setBg, setText } from "../shared/dom.js";
 import {
   createDefaultCapabilityState,
@@ -6,10 +7,7 @@ import {
   saveSessionState,
   setOpsContacts,
 } from "../shared/session-state.js";
-import { hideUserToast, showUserToast } from "../shared/toast.js";
 import {
-  loginQrRetryCountdownSeconds,
-  loginQrRetryIntervalMs,
   mapQrErrorMessage,
   renderCommonText,
   setQrCenterVisible,
@@ -26,10 +24,10 @@ export function renderLoginView() {
       <div id="97_166" class="Pixso-group-97_166">
         <div id="3_35" class="Pixso-rectangle-3_35"></div>
         <p id="3_45" class="Pixso-paragraph-3_45"></p>
-        <div id="3_28" class="Pixso-group-3_28" style="cursor: pointer;">
+        <button id="3_28" class="Pixso-group-3_28 ui-action-trigger" type="button">
           <div id="3_29" class="Pixso-rectangle-3_29 fill-primary-gradient"></div>
           <p id="3_30" class="Pixso-paragraph-3_30"></p>
-        </div>
+        </button>
         <div id="97_159" class="Pixso-group-97_159">
           <div id="3_37" class="Pixso-rectangle-3_37"></div>
           <div id="3_39" class="Pixso-rectangle-3_39"></div>
@@ -38,9 +36,9 @@ export function renderLoginView() {
         </div>
         <p id="3_46" class="Pixso-paragraph-3_46"></p>
       </div>
-      <div id="77_54" class="Pixso-group-77_54">
-        <div id="77_55" class="Pixso-vector-77_55"></div>
-        <p id="77_56" class="Pixso-paragraph-77_56">15</p>
+      <div id="77_54" class="Pixso-group-77_54 ui-main-countdown" data-countdown-phase="idle" aria-label="会话剩余时间">
+        <div id="77_55" class="Pixso-vector-77_55 ui-countdown-ring"></div>
+        <p id="77_56" class="Pixso-paragraph-77_56 ui-countdown-value">—</p>
       </div>
       <div id="97_155" class="Pixso-rectangle-97_155"></div>
       <p id="97_161" class="Pixso-paragraph-97_161">2025/01/01 10:00:00</p>
@@ -53,25 +51,16 @@ export function renderLoginView() {
 
 export function bindLoginViewEvents({ appState }) {
   const { session } = appState;
-  let loginCountdownValue = 0;
-  let loginCountdownActive = false;
-  let loginCountdownTimer = null;
   let loginQrRefreshing = false;
-  let loginQrRetryTimer = null;
-  let loginQrAutoRefreshTimer = null;
-  let printerFaultLocked = false;
-  let cloudAccessLocked = false;
-  let terminalActivationRequired = false;
-  let availabilityPollTimer = null;
-
   let terminalOccupied = false;
-  let occupiedExpireTimer = null;
-
-  function clearOccupiedExpireTimer() {
-    if (!occupiedExpireTimer) return;
-    window.clearTimeout(occupiedExpireTimer);
-    occupiedExpireTimer = null;
-  }
+  const mainCountdown = createMainCountdown({
+    render: (value, phase) => {
+      setText(["77_56"], String(value));
+      const countdown = q("77_54");
+      if (countdown) countdown.dataset.countdownPhase = phase;
+    },
+  });
+  const startCountdown = (seconds, action) => mainCountdown.start(seconds, action);
 
   function setQrCenterStatus(message) {
     const el = q("qrCenterStatus");
@@ -86,158 +75,63 @@ export function bindLoginViewEvents({ appState }) {
     el.classList.remove("is-hidden");
   }
 
-  function setTerminalOccupied(occupied, { expiresAt = null, message = "终端使用中\n请稍候或点击刷新" } = {}) {
+  function setTerminalOccupied(occupied, { message = "终端使用中\n请稍候或点击刷新" } = {}) {
     terminalOccupied = Boolean(occupied);
-    clearOccupiedExpireTimer();
-    if (terminalOccupied) {
-      clearRetryTimer();
+    if (occupied) {
+      mainCountdown.stop();
       clearBg("3_37");
       setQrCenterVisible(false);
-      loginCountdownActive = false;
-      loginCountdownValue = 0;
-      setText(["77_56"], "0");
-      hideUserToast();
       setQrCenterStatus(message);
+      setText(["77_56"], "—");
       updateManualRefreshState();
-      if (expiresAt) {
-        const expiryMs = Date.parse(expiresAt);
-        if (!Number.isNaN(expiryMs)) {
-          const delay = Math.max(1000, expiryMs - Date.now());
-          occupiedExpireTimer = window.setTimeout(() => {
-            occupiedExpireTimer = null;
-            if (!terminalOccupied) return;
-            terminalOccupied = false;
-            setQrCenterStatus("");
-            void refreshQrCode({ automatic: true });
-          }, delay);
-        }
-      }
-      return;
     }
-    setQrCenterStatus("");
-    hideUserToast();
-    updateManualRefreshState();
   }
 
   function setManualRefreshDisabled(disabled) {
     const btn = q("3_28");
     if (!btn) return;
+    btn.disabled = disabled;
     btn.classList.toggle("manual-refresh-disabled", !!disabled);
     btn.style.cursor = disabled ? "not-allowed" : "pointer";
+    btn.style.pointerEvents = disabled ? "none" : "auto";
+    btn.setAttribute("aria-disabled", disabled ? "true" : "false");
   }
 
   function updateManualRefreshState() {
-    setManualRefreshDisabled(
-      printerFaultLocked || cloudAccessLocked || terminalActivationRequired || loginQrRefreshing,
-    );
+    setManualRefreshDisabled(loginQrRefreshing);
   }
 
-  function clearRetryTimer() {
-    if (!loginQrRetryTimer) return;
-    window.clearTimeout(loginQrRetryTimer);
-    loginQrRetryTimer = null;
-  }
-
-  function clearAvailabilityPollTimer() {
-    if (!availabilityPollTimer) return;
-    window.clearInterval(availabilityPollTimer);
-    availabilityPollTimer = null;
-  }
-
-  function setPrinterFaultLocked(fault) {
-    printerFaultLocked = Boolean(fault?.faulted);
-    if (printerFaultLocked) {
-      clearRetryTimer();
-      clearBg("3_37");
-      setQrCenterVisible(false);
-      updateManualRefreshState();
-      loginCountdownActive = false;
-      loginCountdownValue = 0;
-      setText(["77_56"], "0");
-      showUserToast(fault?.message || "打印机故障，请联系管理员处理", "error");
-      if (!availabilityPollTimer) {
-        availabilityPollTimer = window.setInterval(checkPrinterAvailability, 4000);
-      }
-    } else {
-      clearAvailabilityPollTimer();
-      updateManualRefreshState();
-    }
-  }
-
-  async function checkPrinterAvailability() {
-    try {
-      const availability = await getJson(api.printerAvailability);
-      if (availability?.faulted) {
-        setPrinterFaultLocked(availability);
-        return false;
-      }
-      if (printerFaultLocked) {
-        setPrinterFaultLocked(null);
-        hideUserToast();
-        void refreshQrCode();
-      }
-      return true;
-    } catch {
-      return !printerFaultLocked;
-    }
-  }
-
-  function setLoginErrorCountdown(message, errorCode = "") {
-    const code = String(errorCode || "").toLowerCase();
-    terminalActivationRequired = code === "node_not_found";
-    cloudAccessLocked = code === "node_disabled" || code === "printer_disabled";
-    updateManualRefreshState();
-    showUserToast(message, "error");
-    if (terminalActivationRequired) {
-      clearRetryTimer();
-      loginCountdownActive = false;
-      loginCountdownValue = 0;
-      setText(["77_56"], "0");
-      return;
-    }
-    loginCountdownValue = loginQrRetryCountdownSeconds;
-    loginCountdownActive = true;
-    setText(["77_56"], String(loginCountdownValue));
+  function setLoginErrorCountdown(message) {
+    terminalOccupied = false;
+    clearBg("3_37");
+    setQrCenterVisible(false);
+    setQrCenterStatus(message);
+    startCountdown(10, refreshQrCode);
   }
 
   function setQrRefreshLoading() {
     setQrCenterVisible(false);
   }
 
-  async function refreshQrCode({ automatic = false } = {}) {
-    if (loginQrRefreshing || printerFaultLocked || terminalActivationRequired || (cloudAccessLocked && !automatic)) return false;
-    clearRetryTimer();
-    clearOccupiedExpireTimer();
+  async function refreshQrCode() {
+    if (loginQrRefreshing) return false;
     terminalOccupied = false;
     const qrWrap = q("3_37");
     clearBg("3_37");
     loginQrRefreshing = true;
-    loginCountdownActive = false;
-    loginCountdownValue = 0;
-    setText(["77_56"], "0");
+    mainCountdown.stop("loading");
     updateManualRefreshState();
     setQrRefreshLoading();
-    hideUserToast();
-    setQrCenterStatus("正在拉取二维码…");
+    setQrCenterStatus("获取二维码中");
 
     if (qrWrap) qrWrap.style.opacity = "0.6";
 
     try {
-      const available = await checkPrinterAvailability();
-      if (!available) {
-        setQrCenterStatus("");
-        return false;
-      }
       const qr = await getJson(api.qr);
-      if (qr?.error_code === "printer_fault") {
-        setQrCenterStatus("");
-        setPrinterFaultLocked(qr.printer_fault || qr);
-        return false;
-      }
+      if (terminalOccupied) return false;
       if (qr?.standby || qr?.success === false) {
         session.session_id = null;
-        setQrCenterStatus("");
-        setLoginErrorCountdown(mapQrErrorMessage(qr?.error_code, qr?.message), qr?.error_code);
+        setLoginErrorCountdown(mapQrErrorMessage(qr?.error_code, qr?.message));
         return false;
       }
       if (qr?.success && qr.qr_url) {
@@ -256,75 +150,28 @@ export function bindLoginViewEvents({ appState }) {
         setBg("3_37", qr.qr_url);
         setQrCenterVisible(true);
         setQrCenterStatus("");
-        hideUserToast();
-        cloudAccessLocked = false;
-        terminalActivationRequired = false;
-        terminalOccupied = false;
-        loginCountdownValue = 60;
-        loginCountdownActive = true;
-        setText(["77_56"], String(loginCountdownValue));
+        startCountdown(60, refreshQrCode);
         return true;
       }
-      setQrCenterStatus("");
       setLoginErrorCountdown("二维码响应异常");
       return false;
     } catch (error) {
       session.session_id = null;
-      setQrCenterStatus("");
-      setLoginErrorCountdown(mapQrErrorMessage(error?.code, error?.message || "二维码获取失败"), error?.code);
+      setLoginErrorCountdown(mapQrErrorMessage(error?.code, error?.message || "二维码获取失败"));
       return false;
     } finally {
       if (qrWrap) qrWrap.style.opacity = "1";
       loginQrRefreshing = false;
       updateManualRefreshState();
-      if (!loginCountdownActive) {
-        setText(["77_56"], "0");
-      }
     }
   }
-
-  loginCountdownTimer = window.setInterval(() => {
-    if (loginQrRefreshing || terminalOccupied) {
-      setText(["77_56"], "0");
-      return;
-    }
-    if (!loginCountdownActive) {
-      setText(["77_56"], String(Math.max(0, loginCountdownValue)));
-      return;
-    }
-    loginCountdownValue = Math.max(0, loginCountdownValue - 1);
-    setText(["77_56"], String(loginCountdownValue));
-    if (loginCountdownValue === 0) {
-      loginCountdownActive = false;
-      void refreshQrCode({ automatic: true });
-    }
-  }, 1000);
-
-  loginQrAutoRefreshTimer = window.setInterval(() => {
-    if (
-      printerFaultLocked ||
-      cloudAccessLocked ||
-      terminalActivationRequired ||
-      terminalOccupied ||
-      loginQrRetryTimer ||
-      loginQrRefreshing ||
-      loginCountdownActive
-    ) {
-      return;
-    }
-    loginQrRetryTimer = window.setTimeout(() => {
-      loginQrRetryTimer = null;
-      if (loginQrRefreshing || loginCountdownActive || terminalOccupied) return;
-      void refreshQrCode({ automatic: true });
-    }, loginQrRetryIntervalMs);
-  }, loginQrRetryIntervalMs);
 
   setText(["77_56"], "0");
   clearBg("3_37");
   setQrCenterVisible(false);
 
   on("3_28", () => {
-    if (loginQrRefreshing || printerFaultLocked || cloudAccessLocked || terminalActivationRequired) return;
+    if (loginQrRefreshing) return;
     void refreshQrCode();
   });
 
@@ -334,11 +181,7 @@ export function bindLoginViewEvents({ appState }) {
     setLoginErrorCountdown,
     setTerminalOccupied,
     destroy() {
-      if (loginCountdownTimer) window.clearInterval(loginCountdownTimer);
-      if (loginQrAutoRefreshTimer) window.clearInterval(loginQrAutoRefreshTimer);
-      clearAvailabilityPollTimer();
-      clearRetryTimer();
-      clearOccupiedExpireTimer();
+      mainCountdown.destroy();
     },
   };
 }

@@ -79,40 +79,6 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   flex-shrink: 0;
 }
 
-.Pixso-group-77_42 {
-  width: 51px;
-  height: 51px;
-  position: absolute;
-  left: 1574px;
-  top: 21px;
-}
-
-.Pixso-vector-77_43 {
-  width: 51px;
-  height: 51px;
-  background-image: url(../images/preview__Ellipse_77_43.png);
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  position: absolute;
-  left: 0px;
-  top: 0px;
-}
-
-.Pixso-paragraph-77_44 {
-  font-size: 24px;
-  font-family: "Microsoft YaHei-Regular";
-  font-weight: 400;
-  letter-spacing: 0em;
-  color: rgba(0, 0, 0, 1);
-  width: auto;
-  height: auto;
-  position: absolute;
-  left: 11px;
-  top: 10px;
-  white-space: pre;
-  flex-grow: 0;
-}
-
 .Pixso-rectangle-97_446 {
   width: 378px;
   height: 46px;
@@ -131,6 +97,9 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   position: absolute;
   left: 730px;
   top: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .Pixso-vector-97_448 {
@@ -150,11 +119,14 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   font-weight: 400;
   letter-spacing: 0em;
   color: rgba(0, 0, 0, 1);
-  width: auto;
-  height: auto;
-  position: absolute;
-  left: 11px;
-  top: 10px;
+  width: 3ch;
+  height: 1em;
+  position: relative;
+  left: auto;
+  top: auto;
+  z-index: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
   white-space: pre;
   flex-grow: 0;
 }
@@ -209,7 +181,8 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   z-index: 5;
 }
 
-.Pixso-rectangle-97_455 {
+.Pixso-rectangle-97_455,
+.done-secondary-action-surface {
   width: 418px;
   height: 110px;
   position: absolute;
@@ -880,6 +853,18 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   to {
     transform: rotate(-360deg);
   }
+}
+
+.Pixso-group-97_454.ui-action-trigger,
+.Pixso-group-97_460.ui-action-trigger {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.Pixso-group-97_447 .ui-countdown-ring {
+  animation: ui-countdown-spin 1.2s linear infinite;
 }
 
   

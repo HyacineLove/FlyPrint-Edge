@@ -1,113 +1,78 @@
 .files-terminal-shell {
   width: 1080px;
   min-height: 1920px;
-  padding: 92px 72px;
-  color: #1c2750;
-  background:
-    radial-gradient(circle at 12% 6%, rgba(132, 168, 255, 0.28), transparent 34%),
-    radial-gradient(circle at 90% 92%, rgba(116, 102, 244, 0.20), transparent 36%),
-    linear-gradient(145deg, #eef4ff 0%, #f7f4ff 48%, #eef8ff 100%);
-  font-family: "Microsoft YaHei-Regular", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+  color: var(--ui-text);
+  font-family: var(--ui-font-regular);
 }
 
-.files-terminal-card {
-  min-height: 1736px;
-  padding: 64px 58px 48px;
-  border: 1px solid rgba(99, 111, 226, 0.16);
-  border-radius: 40px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 28px 80px rgba(58, 70, 145, 0.15);
+.files-view {
+  position: relative;
+  width: 1080px;
+  min-height: 1920px;
+  padding: 126px 107px 72px;
 }
 
 .files-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 36px;
-  min-height: 188px;
+  position: relative;
+  min-height: 82px;
 }
 
-.files-eyebrow {
-  margin-bottom: 16px;
-  color: #6672a6;
-  font-size: 28px;
+.files-header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 866px;
+  min-height: 82px;
 }
 
 .files-header h1 {
-  max-width: 690px;
-  font-family: "Microsoft YaHei-Bold", "Microsoft YaHei", sans-serif;
-  font-size: 48px;
-  line-height: 1.35;
-}
-
-.files-helper {
-  margin-top: 16px;
-  color: #7b83a5;
-  font-size: 24px;
-  line-height: 1.5;
+  margin: 0;
+  color: var(--ui-text);
+  font: 700 48px/1.35 var(--ui-font-bold);
 }
 
 .files-countdown {
-  flex: 0 0 132px;
-  height: 132px;
-  padding-top: 20px;
-  text-align: center;
-  border: 7px solid #dfe5ff;
-  border-radius: 50%;
-  background: #f8f9ff;
-  box-shadow: inset 0 0 0 2px rgba(116, 102, 244, 0.08);
+  top: -105px;
+  left: 623px;
+  width: 51px;
+  height: 51px;
 }
 
-.files-countdown strong {
-  display: block;
-  color: #6b63eb;
-  font: 700 42px/1 "Microsoft YaHei-Bold", sans-serif;
+.files-countdown .ui-countdown-ring {
+  background-image: url("../images/preview__Ellipse_97_448.png");
 }
 
-.files-countdown span {
-  display: block;
-  margin-top: 8px;
-  color: #7b83a5;
-  font-size: 17px;
+.files-countdown[data-countdown-phase="counting"] .ui-countdown-ring,
+.files-countdown[data-countdown-phase="loading"] .ui-countdown-ring {
+  animation: ui-countdown-spin 1.2s linear infinite;
+}
+
+.files-clock {
+  position: absolute;
+  top: -98px;
+  left: 693px;
+  width: 250px;
+  color: rgba(96, 96, 96, 1);
+  font: 700 24px/1.2 var(--ui-font-bold);
+  white-space: nowrap;
 }
 
 .files-panel {
-  min-height: 1160px;
-  margin-top: 48px;
-  padding: 42px 38px 36px;
-  border: 1px solid #e2e7f5;
-  border-radius: 28px;
-  background: #f8f9fe;
+  position: static;
+  min-height: 0;
+  margin-top: 34px;
 }
 
 .files-panel-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  min-height: 92px;
-  gap: 24px;
-}
-
-.files-panel-heading h2 {
-  color: #26325f;
-  font: 700 34px/1.3 "Microsoft YaHei-Bold", sans-serif;
+  min-height: 40px;
 }
 
 .files-status {
-  min-height: 36px;
-  margin-top: 10px;
-  color: #727b9f;
-  font-size: 22px;
-  line-height: 1.5;
-}
-
-.files-total {
-  flex: 0 0 auto;
-  padding: 10px 18px;
-  color: #666fd0;
-  border-radius: 18px;
-  background: #e9ecff;
-  font-size: 20px;
+  min-height: 0;
+  margin-top: 8px;
+  color: var(--ui-muted);
+  font: 400 24px/1.5 var(--ui-font-regular);
 }
 
 .files-panel-actions {
@@ -117,33 +82,51 @@
   gap: 14px;
 }
 
-.files-refresh {
-  min-width: 104px;
-  padding: 10px 18px;
-  color: #ffffff;
-  border: 0;
+.files-refresh,
+.files-pager button {
+  min-width: 154px;
+  min-height: 72px;
+  padding: 0 24px;
+  border: 1px solid rgba(117, 126, 190, 0.35);
   border-radius: 18px;
-  background: linear-gradient(135deg, #82a7ff, #7466f4);
-  font: 600 20px/1.3 "Microsoft YaHei-Regular", sans-serif;
+  color: #5f67bd;
+  background: rgba(255, 255, 255, 0.86);
+  font: 600 23px/1.3 var(--ui-font-regular);
   cursor: pointer;
 }
 
-.files-refresh:active:not(:disabled) {
+.files-refresh {
+  color: #ffffff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end));
+}
+
+.files-header .files-refresh {
+  flex: 0 0 154px;
+  align-self: center;
+}
+
+.files-refresh:active:not(:disabled),
+.files-pager button:active:not(:disabled) {
   transform: scale(0.97);
 }
 
-.files-refresh:disabled {
+.files-refresh:disabled,
+.files-pager button:disabled {
   color: #a9aec4;
-  background: #e5e8f2;
-  cursor: wait;
+  border-color: #e2e5ef;
+  background: #f1f3f8;
+  cursor: not-allowed;
 }
 
 .files-list {
   display: grid;
   align-content: start;
   gap: 18px;
-  min-height: 900px;
-  padding-top: 22px;
+  height: 1120px;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 18px;
 }
 
 .files-item {
@@ -153,14 +136,13 @@
   width: 100%;
   min-height: 126px;
   padding: 20px 26px 20px 22px;
+  border: 1px solid rgba(117, 126, 190, 0.22);
+  border-radius: 20px;
   color: #172033;
+  background: rgba(255, 255, 255, 0.78);
   text-align: left;
-  border: 1px solid #dce4f0;
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(56, 72, 130, 0.07);
   cursor: pointer;
-  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
 }
 
 .files-item:active:not(:disabled) {
@@ -170,13 +152,13 @@
 .files-item:hover:not(:disabled),
 .files-item:focus-visible:not(:disabled) {
   border-color: #8f91f5;
-  box-shadow: 0 10px 28px rgba(92, 86, 210, 0.14);
+  background: rgba(255, 255, 255, 0.96);
   outline: none;
 }
 
 .files-item:disabled {
-  cursor: wait;
-  opacity: 0.62;
+  opacity: var(--ui-disabled-opacity);
+  cursor: not-allowed;
 }
 
 .files-item-badge {
@@ -185,10 +167,10 @@
   justify-content: center;
   width: 64px;
   height: 72px;
-  color: #ffffff;
   border-radius: 14px;
-  background: linear-gradient(145deg, #86a8ff, #7165ee);
-  font: 700 20px/1 "Microsoft YaHei-Bold", sans-serif;
+  color: #ffffff;
+  background: linear-gradient(145deg, var(--ui-primary-start), var(--ui-primary-end));
+  font: 700 20px/1 var(--ui-font-bold);
 }
 
 .files-item-summary {
@@ -201,81 +183,61 @@
 .files-item-summary strong {
   overflow: hidden;
   color: #25305b;
-  font: 700 27px/1.35 "Microsoft YaHei-Bold", sans-serif;
+  font: 700 27px/1.35 var(--ui-font-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .files-item-detail {
   color: #7b83a5;
-  font-size: 21px;
+  font: 400 21px/1.3 var(--ui-font-regular);
 }
 
 .files-item-arrow {
   color: #8b91b5;
-  font-size: 48px;
-  line-height: 1;
+  font: 400 48px/1 var(--ui-font-regular);
+  text-align: center;
 }
 
 .files-pager {
+  position: absolute;
+  top: 1550px;
+  left: 107px;
+  width: 866px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 30px;
   min-height: 82px;
-  margin-top: 20px;
-}
-
-.files-pager button {
-  min-width: 154px;
-  padding: 18px 24px;
-  color: #5f67bd;
-  border: 1px solid #ccd3f2;
-  border-radius: 18px;
-  background: #ffffff;
-  font: 600 23px/1.3 "Microsoft YaHei-Regular", sans-serif;
-}
-
-.files-pager button:disabled {
-  color: #a9aec4;
-  border-color: #e2e5ef;
-  background: #f1f3f8;
+  margin: 0;
 }
 
 #filesPage {
   min-width: 112px;
   color: #5f678e;
+  font: 400 23px/1.3 var(--ui-font-regular);
   text-align: center;
-  font-size: 23px;
+}
+
+.files-action-region {
+  top: 1700px;
+  left: 107px;
+}
+
+.files-action-region--single {
+  justify-content: center;
 }
 
 .files-exit {
-  width: 100%;
-  margin-top: 38px;
-  padding: 27px 36px;
-  color: #ffffff;
-  border: 0;
-  border-radius: 22px;
-  background: linear-gradient(135deg, #82a7ff, #7466f4);
-  box-shadow: 0 12px 28px rgba(102, 91, 244, 0.20);
-  font: 700 32px/1.35 "Microsoft YaHei-Bold", sans-serif;
-  cursor: pointer;
-}
-
-.files-exit:active {
-  transform: scale(0.992);
-}
-
-.files-security-note {
-  margin-top: 22px;
-  color: #858ca9;
-  text-align: center;
-  font-size: 20px;
-  line-height: 1.5;
+  width: 418px;
+  height: 110px;
+  flex: 0 0 var(--ui-action-width);
+  margin: 0;
 }
 
 @media (max-width: 1079px) {
-  .files-terminal-shell {
+  .files-terminal-shell,
+  .files-view {
     width: 100vw;
     min-height: 100vh;
   }

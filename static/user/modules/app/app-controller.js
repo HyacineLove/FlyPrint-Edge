@@ -3,7 +3,6 @@ import { createRouter } from "./router.js";
 import { UserSseClient } from "./sse-client.js";
 import { initTouchRestrictions } from "../shared/touch-guard.js";
 import { renderDoneView, bindDoneViewEvents } from "../views/done-view.js";
-import { renderIdentityView, bindIdentityViewEvents } from "../views/identity-view.js";
 import { renderLoginView, bindLoginViewEvents } from "../views/login-view.js";
 import { renderPreviewView, bindPreviewViewEvents } from "../views/preview-view.js";
 import { renderPrintingView, bindPrintingViewEvents } from "../views/printing-view.js";
@@ -23,7 +22,6 @@ import { applyIdentityReady } from "./identity-session.js";
 
 const viewRegistry = {
   login: { render: renderLoginView, bind: bindLoginViewEvents },
-  identity: { render: renderIdentityView, bind: bindIdentityViewEvents },
   files: { render: renderPRPFilesView, bind: bindPRPFilesViewEvents },
   preview: { render: renderPreviewView, bind: bindPreviewViewEvents },
   printing: { render: renderPrintingView, bind: bindPrintingViewEvents },

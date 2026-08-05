@@ -1,5 +1,6 @@
 import { api, postJson } from "../shared/api.js";
 import { applyPrinterCapabilityState, setOptionDisabledState } from "../shared/capabilities.js";
+import { createMainCountdown } from "../shared/countdown.js";
 import { on, q, setPreviewBg, setText } from "../shared/dom.js";
 import {
   clearPendingPrintRequest,
@@ -19,7 +20,6 @@ import {
 import {
   mapPreviewErrorMessage,
   normalizeDuplexForApi,
-  previewFailureFallbackSeconds,
 } from "../shared/runtime.js";
 
 export function renderPreviewView() {
@@ -27,26 +27,22 @@ export function renderPreviewView() {
 <div class="scroll-container-0_1">
   <div id="0_1" class="Pixso-canvas-0_1">
     <div id="55_77" class="Pixso-frame-55_77 fill-bg-gradient">
-      <div id="77_42" class="Pixso-group-77_42">
-        <div id="77_43" class="Pixso-vector-77_43"></div>
-        <p id="77_44" class="Pixso-paragraph-77_44">15</p>
-      </div>
       <div id="97_446" class="Pixso-rectangle-97_446"></div>
-      <div id="97_447" class="Pixso-group-97_447">
-        <div id="97_448" class="Pixso-vector-97_448"></div>
-        <p id="97_449" class="Pixso-paragraph-97_449">60</p>
+      <div id="97_447" class="Pixso-group-97_447 ui-main-countdown" data-countdown-phase="idle" aria-label="浼氳瘽鍓╀綑鏃堕棿">
+        <div id="97_448" class="Pixso-vector-97_448 ui-countdown-ring"></div>
+        <p id="97_449" class="Pixso-paragraph-97_449 ui-countdown-value">鈥?/p>
       </div>
       <p id="97_450" class="Pixso-paragraph-97_450">2025/01/01 10:00:00</p>
-      <div id="97_454" class="Pixso-group-97_454" style="cursor: pointer;">
+      <button id="97_454" class="Pixso-group-97_454 ui-action-trigger" type="button">
         <div id="97_455" class="Pixso-rectangle-97_455"></div>
         <p id="97_456" class="Pixso-paragraph-97_456"></p>
-      </div>
+      </button>
       <div id="97_457" class="Pixso-rectangle-97_457"></div>
       <p id="97_459" class="Pixso-paragraph-97_459"></p>
-      <div id="97_460" class="Pixso-group-97_460" style="cursor: pointer;">
+      <button id="97_460" class="Pixso-group-97_460 ui-action-trigger" type="button">
         <div id="97_461" class="Pixso-rectangle-97_461 fill-primary-gradient"></div>
         <p id="97_462" class="Pixso-paragraph-97_462"></p>
-      </div>
+      </button>
       <div id="115_60" class="Pixso-group-115_60">
         <div id="55_129" class="Pixso-group-55_129">
           <div id="55_112" class="Pixso-rectangle-55_112"></div>
@@ -111,9 +107,6 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   applyPrinterCapabilityState(session.defaultPrinterCapabilities);
   saveSessionState();
 
-  let previewCountdownValue = 60;
-  let previewCountdownActive = false;
-  let previewCountdownTimer = null;
   let previewFirstLoadDone = false;
   let previewLoading = false;
   let previewActiveChipBackgroundImage = "";
@@ -124,19 +117,21 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   let printSubmitting = false;
   let prpReturnInFlight = false;
   let previewControlsLocked = true;
+  const mainCountdown = createMainCountdown({ render: setPreviewCountdownDisplay });
+  const startCountdown = (seconds, action) => mainCountdown.start(seconds, action);
 
-  function setPreviewCountdownDisplay(value) {
-    setText(["77_44", "97_449"], String(Math.max(0, value)));
+  function setPreviewCountdownDisplay(value, phase) {
+    setText(["97_449"], String(value));
+    const countdown = q("97_447");
+    if (countdown) countdown.dataset.countdownPhase = phase;
   }
 
   function pausePreviewCountdown() {
-    previewCountdownActive = false;
+    mainCountdown.stop("loading");
   }
 
   function resumePreviewCountdown(fullReset = false) {
-    if (fullReset) previewCountdownValue = 60;
-    previewCountdownActive = true;
-    setPreviewCountdownDisplay(previewCountdownValue);
+    startCountdown(60, () => restartCycle());
   }
 
   function setPreviewLoadingPlaceholder(visible) {
@@ -149,7 +144,15 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     const prevBtn = q("115_61");
     const nextBtn = q("115_62");
     if (!prevBtn || !nextBtn) return;
-    const enabled = previewFirstLoadDone && !previewLoading && !previewFailureMode && previewPageCount > 1;
+    const enabled =
+      previewFirstLoadDone &&
+      !previewControlsLocked &&
+      !previewLoading &&
+      !previewRefreshTimer &&
+      !prpReturnInFlight &&
+      !printSubmitting &&
+      !previewFailureMode &&
+      previewPageCount > 1;
     prevBtn.disabled = !enabled || previewCurrentPage <= 0;
     nextBtn.disabled = !enabled || previewCurrentPage >= previewPageCount - 1;
     updatePrintButtonState();
@@ -158,7 +161,10 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   function setInteractionDisabled(element, disabled) {
     if (!element) return;
     element.classList.toggle("is-disabled", disabled);
+    element.classList.toggle("is-loading", disabled && previewLoading);
+    element.classList.toggle("is-business-locked", disabled && previewFailureMode);
     element.style.pointerEvents = disabled ? "none" : "auto";
+    if ("disabled" in element) element.disabled = disabled;
     element.setAttribute("aria-disabled", disabled ? "true" : "false");
   }
 
@@ -184,16 +190,14 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     updatePreviewPageButtons();
   }
 
-  function enterPreviewFailureMode(errorMessage) {
+  function enterPreviewFailureMode(errorMessage, retryAction) {
     previewFailureMode = true;
     pausePreviewCountdown();
-    previewCountdownValue = previewFailureFallbackSeconds;
-    previewCountdownActive = true;
-    setPreviewCountdownDisplay(previewCountdownValue);
-    setText(["97_481"], "预览加载失败，正在返回二维码页...");
-    setText(["97_480"], `-${errorMessage || "请稍后重试"}-`);
+    setText(["97_481"], "\u9884\u89c8\u52a0\u8f7d\u5931\u8d25");
+    setText(["97_480"], `-${errorMessage || "\u8bf7\u7a0d\u540e\u91cd\u8bd5"}-`);
     setPreviewLoadingPlaceholder(true);
     setPreviewControlsLocked(true, true);
+    startCountdown(10, retryAction);
   }
 
   function renderOptionsUI() {
@@ -246,14 +250,17 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     updatePreviewPageButtons();
   }
 
-  async function renderPreview(pageIndex = 0, blockUi = false) {
-    if (!session.file?.file_id || (!isPRPSource && !session.file?.file_url) || previewLoading || previewFailureMode) return false;
+  async function renderPreview(pageIndex = 0, blockUi = false, { retryAfterFailure = false } = {}) {
+    if (
+      !session.file?.file_id ||
+      (!isPRPSource && !session.file?.file_url) ||
+      previewLoading ||
+      (previewFailureMode && !retryAfterFailure)
+    ) return false;
     previewLoading = true;
     setPreviewLoadingPlaceholder(true);
-    if (blockUi) {
-      setPreviewControlsLocked(true);
-      pausePreviewCountdown();
-    }
+    setPreviewControlsLocked(true);
+    pausePreviewCountdown();
     updatePreviewPageButtons();
 
     try {
@@ -286,21 +293,24 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
       setPreviewBg("115_58", response.preview_url);
       setPreviewLoadingPlaceholder(false);
 
-      if (!previewFirstLoadDone && blockUi) {
+      previewFailureMode = false;
+      if (!previewFirstLoadDone) {
         previewFirstLoadDone = true;
         setPreviewControlsLocked(false);
-        resumePreviewCountdown(true);
+      } else {
+        setPreviewControlsLocked(false);
       }
+      resumePreviewCountdown(true);
 
       updatePreviewPageButtons();
       return true;
     } catch (error) {
-      enterPreviewFailureMode(mapPreviewErrorMessage(error?.code, error?.message || "预览加载失败"));
+      const message = mapPreviewErrorMessage(error?.code, error?.message || "预览加载失败");
+      enterPreviewFailureMode(message, () => {
+        previewFailureMode = false;
+        void renderPreview(pageIndex, false, { retryAfterFailure: true });
+      });
       setPreviewLoadingPlaceholder(true);
-      if (blockUi) {
-        setPreviewControlsLocked(true, true);
-        pausePreviewCountdown();
-      }
       return false;
     } finally {
       previewLoading = false;
@@ -309,37 +319,45 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   }
 
   function queuePreviewRefresh() {
-    if (!previewFirstLoadDone || previewFailureMode) return;
+    if (!previewFirstLoadDone || previewLoading || previewFailureMode || prpReturnInFlight || printSubmitting) return;
     if (previewRefreshTimer) {
       window.clearTimeout(previewRefreshTimer);
       previewRefreshTimer = null;
     }
+    setPreviewControlsLocked(true);
+    pausePreviewCountdown();
     previewRefreshTimer = window.setTimeout(async () => {
       previewRefreshTimer = null;
-      if (previewLoading) {
-        queuePreviewRefresh();
-        return;
-      }
-      const ok = await renderPreview(previewCurrentPage, false);
-      if (ok) {
-        resumePreviewCountdown(true);
-      }
+      await renderPreview(previewCurrentPage, false);
     }, 120);
     updatePrintButtonState();
   }
 
-  previewCountdownTimer = window.setInterval(() => {
-    if (!previewCountdownActive) {
-      setPreviewCountdownDisplay(previewCountdownValue);
-      return;
+  async function returnToFiles() {
+    if (!isPRPSource || prpReturnInFlight) return false;
+    prpReturnInFlight = true;
+    pausePreviewCountdown();
+    setPreviewControlsLocked(true);
+    try {
+      await postJson(api.prpSelection, {
+        session_id: currentSessionId() || undefined,
+      });
+      session.file = {};
+      appState.sessionPhase = "identity_ready";
+      saveSessionState();
+      await router.go("files");
+      return true;
+    } catch (error) {
+      setText(["97_480"], `-${error?.message || "返回文件列表失败，请重试"}-`);
+      setPreviewControlsLocked(previewFailureMode, previewFailureMode);
+      startCountdown(10, () => returnToFiles());
+      return false;
+    } finally {
+      prpReturnInFlight = false;
+      updatePrintButtonState();
+      updatePreviewPageButtons();
     }
-    previewCountdownValue = Math.max(0, previewCountdownValue - 1);
-    setPreviewCountdownDisplay(previewCountdownValue);
-    if (previewCountdownValue === 0) {
-      previewCountdownActive = false;
-      void restartCycle();
-    }
-  }, 1000);
+  }
 
   setPreviewCountdownDisplay(60);
   setText(["97_481"], "文档加载中...");
@@ -353,35 +371,17 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     }
   }
 
-  on("97_454", async () => {
+  on("97_454", () => {
     if (!previewFailureMode && !previewFirstLoadDone) return;
     if (isPRPSource) {
-      if (prpReturnInFlight) return;
-      prpReturnInFlight = true;
-      pausePreviewCountdown();
-      setPreviewControlsLocked(true);
-      try {
-        await postJson(api.prpSelection, {
-          session_id: currentSessionId() || undefined,
-        });
-        session.file = {};
-        appState.sessionPhase = "identity_ready";
-        saveSessionState();
-        await router.go("files");
-      } catch (error) {
-        setText(["97_480"], `-${error?.message || "返回文件列表失败，请重试"}-`);
-        setPreviewControlsLocked(false);
-        resumePreviewCountdown(false);
-      } finally {
-        prpReturnInFlight = false;
-      }
+      void returnToFiles();
       return;
     }
     void restartCycle();
   });
 
   const changeCopies = (delta) => {
-    if (!previewFirstLoadDone || previewFailureMode) return;
+    if (!previewFirstLoadDone || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode) return;
     session.options.copies = normalizeCopies(Number(session.options.copies || 1) + delta);
     saveSessionState();
     renderOptionsUI();
@@ -389,7 +389,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   };
 
   const pickDuplex = (value) => {
-    if (!previewFirstLoadDone || previewFailureMode) return;
+    if (!previewFirstLoadDone || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode) return;
     if (!session.capabilityState?.duplexSupported && value !== "simplex") return;
     session.options.duplex = value;
     saveSessionState();
@@ -398,7 +398,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   };
 
   const pickColor = (value) => {
-    if (!previewFirstLoadDone || previewFailureMode) return;
+    if (!previewFirstLoadDone || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode) return;
     if (!session.capabilityState?.colorSupported && value === "color") return;
     session.options.color_mode = value;
     saveSessionState();
@@ -414,12 +414,14 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   ["133_36", "133_38"].forEach((id) => on(id, () => pickColor("mono")));
 
   on("115_61", async () => {
-    if (!previewFirstLoadDone || previewLoading || previewFailureMode || previewCurrentPage <= 0) return;
-    await renderPreview(previewCurrentPage - 1, false);
+    if (!previewFirstLoadDone || previewControlsLocked || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode || previewCurrentPage <= 0) return;
+    const ok = await renderPreview(previewCurrentPage - 1, false);
+    if (ok) resumePreviewCountdown(true);
   });
   on("115_62", async () => {
-    if (!previewFirstLoadDone || previewLoading || previewFailureMode || previewCurrentPage >= previewPageCount - 1) return;
-    await renderPreview(previewCurrentPage + 1, false);
+    if (!previewFirstLoadDone || previewControlsLocked || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode || previewCurrentPage >= previewPageCount - 1) return;
+    const ok = await renderPreview(previewCurrentPage + 1, false);
+    if (ok) resumePreviewCountdown(true);
   });
   on("97_460", () => {
     if (
@@ -452,9 +454,14 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   void renderPreview(0, true);
 
   return {
-    handlePreviewError: enterPreviewFailureMode,
+    handlePreviewError(message) {
+      enterPreviewFailureMode(message, () => {
+        previewFailureMode = false;
+        void renderPreview(previewCurrentPage, false, { retryAfterFailure: true });
+      });
+    },
     destroy() {
-      if (previewCountdownTimer) window.clearInterval(previewCountdownTimer);
+      mainCountdown.destroy();
       if (previewRefreshTimer) window.clearTimeout(previewRefreshTimer);
     },
   };

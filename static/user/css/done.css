@@ -222,31 +222,49 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   left: 331px;
 }
 
-.done-continue-button {
+.Pixso-group-115_43 {
   width: 418px;
   height: 110px;
   position: absolute;
   left: 107px;
   top: 1700px;
   z-index: 5;
-  border: 2px solid rgba(37, 115, 255, 1);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 1);
-  color: rgba(37, 115, 255, 1);
-  font-size: 50px;
-  font-family: "Microsoft YaHei-Bold";
-  font-weight: 700;
-  line-height: 1;
+  display: block;
+  border: 0;
   padding: 0;
+  background: transparent;
   cursor: pointer;
 }
 
-.done-continue-button:hover,
-.done-continue-button:focus-visible {
-  background: rgba(240, 246, 255, 1);
+.done-secondary-action-surface {
+  width: 418px;
+  height: 110px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 20px;
 }
 
-.done-continue-button:disabled {
+.Pixso-paragraph-115_45 {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 418px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 50px;
+  font-family: "Microsoft YaHei-Bold";
+  font-weight: 700;
+  color: rgba(255, 255, 255, 1);
+  letter-spacing: 0;
+  white-space: nowrap;
+  line-height: 1;
+  z-index: 1;
+}
+
+.Pixso-group-115_43:disabled {
   opacity: 0.55;
   cursor: wait;
 }
@@ -279,53 +297,23 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   z-index: 1;
 }
 
-.Pixso-group-115_37 {
+.done-printer-refresh {
   position: absolute;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 51px;
-  height: 51px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 1;
+  left: 331px;
+  top: 1510px;
+  width: 418px;
+  height: 96px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #86adff, #7867f8);
+  color: #ffffff;
+  font: 700 42px/1 "Microsoft YaHei-Bold", sans-serif;
+  cursor: pointer;
+  z-index: 5;
 }
 
-.Pixso-vector-115_38 {
-  width: 51px;
-  height: 51px;
-  border-radius: 50%;
-  position: absolute;
-  inset: 0;
-  background-image: url(../images/done__Ellipse_77_39.png);
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
-  animation: done-return-spin 1.2s linear infinite;
-}
-
-.Pixso-paragraph-115_39 {
-  font-size: 24px;
-  font-family: "Microsoft YaHei-Regular";
-  font-weight: 400;
-  color: rgba(255, 255, 255, 1);
-  width: 3ch;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes done-return-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(-360deg);
-  }
+.done-printer-refresh:disabled {
+  cursor: wait;
 }
 
 .Pixso-paragraph-115_26 {
@@ -352,6 +340,51 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   white-space: pre-line;
   text-align: center;
   line-height: 1.35;
+}
+
+/* Shared terminal controls override the generated design coordinates. */
+.Pixso-group-115_18.ui-main-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.Pixso-group-115_18 .ui-countdown-ring {
+  animation: ui-countdown-spin 1.2s linear infinite;
+}
+
+.Pixso-paragraph-115_20.ui-countdown-value {
+  width: 3ch;
+  height: 1em;
+  position: relative;
+  left: auto;
+  top: auto;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
+
+.Pixso-group-115_40.ui-action-button,
+.Pixso-group-115_43.ui-action-button {
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 20px;
+}
+
+.Pixso-group-115_40.ui-action-button {
+  background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end));
+}
+
+.Pixso-group-115_43.ui-action-button {
+  background: linear-gradient(135deg, #b9bfce, #b0acd0);
+}
+
+.done-printer-refresh.ui-action-button {
+  width: var(--ui-action-width);
+  height: var(--ui-action-height);
+  padding: 0 24px;
+  border-radius: 20px;
+  font: 700 50px/1 var(--ui-font-bold);
 }
 
 .container {

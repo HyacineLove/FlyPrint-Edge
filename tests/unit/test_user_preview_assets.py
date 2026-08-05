@@ -29,6 +29,16 @@ def read_source(path):
 
 
 class UserPreviewAssetTests(unittest.TestCase):
+    def test_user_spa_removes_the_obsolete_identity_success_page(self):
+        app_controller = read_source(BASE_DIR / "modules/app/app-controller.js")
+        index_html = read_source(BASE_DIR / "Index.html")
+
+        self.assertNotIn('"../views/identity-view.js"', app_controller)
+        self.assertNotIn("identity: { render:", app_controller)
+        self.assertNotIn("css/identity.css", index_html)
+        self.assertFalse((BASE_DIR / "modules/views/identity-view.js").exists())
+        self.assertFalse((BASE_DIR / "css/identity.css").exists())
+
     def _require_existing_files(self, relative_paths, message_prefix):
         missing = [str(BASE_DIR / relative_path) for relative_path in relative_paths if not (BASE_DIR / relative_path).exists()]
         self.assertEqual([], missing, f"{message_prefix}: {missing}")
@@ -52,6 +62,112 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn('href="/static/user/css/login.css"', html, "SPA shell should use absolute CSS paths")
         for pattern in FULL_PAGE_NAVIGATION_PATTERNS:
             self.assertNotRegex(html, pattern, f"SPA shell should not trigger full-page navigation via pattern {pattern}")
+
+    def test_user_shell_loads_common_css_before_page_styles(self):
+        html = read_source(BASE_DIR / "Index.html")
+        common = html.index('href="/static/user/css/common.css"')
+        login = html.index('href="/static/user/css/login.css"')
+        files = html.index('href="/static/user/css/files.css"')
+        self.assertLess(common, login)
+        self.assertLess(login, files)
+
+    def test_common_css_owns_shared_primitives(self):
+        common_css = read_source(BASE_DIR / "css/common.css")
+        for selector in (
+            ".ui-main-countdown",
+            ".ui-countdown-ring",
+            ".ui-countdown-value",
+            ".ui-action-region",
+            ".ui-action-button",
+            ".is-loading",
+            ".is-business-locked",
+            ".fill-bg-gradient",
+            ".fill-primary-gradient",
+        ):
+            self.assertIn(selector, common_css)
+
+    def test_countdown_views_use_shared_markup_and_explicit_loading_stop(self):
+        views = {
+            "login": read_source(BASE_DIR / "modules/views/login-view.js"),
+            "preview": read_source(BASE_DIR / "modules/views/preview-view.js"),
+            "done": read_source(BASE_DIR / "modules/views/done-view.js"),
+            "files": read_source(BASE_DIR / "modules/app/prp-files.js"),
+        }
+        for name, source in views.items():
+            with self.subTest(page=name):
+                self.assertIn("ui-main-countdown", source)
+                self.assertIn("ui-countdown-ring", source)
+                self.assertIn("ui-countdown-value", source)
+                self.assertIn('stop("loading")', source)
+        self.assertNotIn('id="77_42"', views["preview"])
+        self.assertNotIn('id="77_44"', views["preview"])
+
+    def test_files_page_uses_common_single_action_region_and_minimal_success_copy(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+        files_css = read_source(BASE_DIR / "css/files.css")
+        self.assertIn("ui-action-region", files_view)
+        self.assertIn("ui-action-button", files_view)
+        self.assertIn("files-action-region--single", files_view)
+        self.assertNotIn('id="filesTotal"', files_view)
+        self.assertNotIn('>鍙墦鍗版枃浠?', files_view)
+        self.assertIn(".files-action-region--single", files_css)
+        self.assertIn("width: 418px", files_css)
+        self.assertIn("height: 110px", files_css)
+
+    def test_countdown_and_action_css_are_centered_and_animated(self):
+        common_css = read_source(BASE_DIR / "css/common.css")
+        files_css = read_source(BASE_DIR / "css/files.css")
+        self.assertRegex(common_css, r"\.ui-countdown-value\s*\{[^}]*width:\s*3ch")
+        self.assertRegex(common_css, r"\.ui-countdown-value\s*\{[^}]*text-align:\s*center")
+        self.assertIn("animation:", common_css)
+        self.assertIn("animation:", files_css)
+        self.assertRegex(common_css, r"\.ui-action-region\.is-single\s*\{[^}]*justify-content:\s*center")
+
+    def test_visible_countdown_ring_keeps_rotating_in_every_phase(self):
+        common_css = read_source(BASE_DIR / "css/common.css")
+        self.assertRegex(
+            common_css,
+            r"\.ui-countdown-ring\s*\{[^}]*animation:\s*ui-countdown-spin",
+        )
+        self.assertNotRegex(
+            common_css,
+            r"\.ui-main-countdown\[data-countdown-phase=\"idle\"\] \.ui-countdown-ring\s*\{[^}]*animation:\s*none",
+        )
+
+    def test_login_refresh_button_has_explicit_terminal_position(self):
+        login_css = read_source(BASE_DIR / "css/login.css")
+        self.assertRegex(
+            login_css,
+            r"\.Pixso-group-3_28\.ui-action-trigger\s*\{[^}]*display:\s*block[^}]*position:\s*absolute[^}]*top:\s*724px",
+        )
+
+    def test_files_page_keeps_clock_refresh_and_pager_in_fixed_regions(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+        files_css = read_source(BASE_DIR / "css/files.css")
+        runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
+        self.assertIn('id="filesClock"', files_view)
+        self.assertIn('id="filesRefresh"', files_view)
+        self.assertIn('"filesClock"', runtime)
+        self.assertRegex(files_css, r"\.files-pager\s*\{[^}]*position:\s*absolute[^}]*top:\s*1550px")
+        self.assertRegex(files_css, r"\.files-header[^}]*position:\s*relative")
+        self.assertIn("files-header .files-refresh", files_css)
+
+    def test_done_refresh_detection_is_hidden_outside_fault_or_unconfirmed_states(self):
+        common_css = read_source(BASE_DIR / "css/common.css")
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        self.assertIn("[hidden]", common_css)
+        self.assertIn('refreshButton.hidden = true', done_view)
+        self.assertIn('refreshButton.hidden = false', done_view)
+
+    def test_stale_countdown_css_is_removed_from_printing_and_preview(self):
+        preview_css = read_source(BASE_DIR / "css/preview.css")
+        printing_css = read_source(BASE_DIR / "css/printing.css")
+        self.assertNotIn(".Pixso-group-77_42", preview_css)
+        self.assertNotIn(".Pixso-vector-77_43", preview_css)
+        self.assertNotIn(".Pixso-paragraph-77_44", preview_css)
+        self.assertNotIn(".Pixso-group-115_18", printing_css)
+        self.assertNotIn(".Pixso-vector-115_19", printing_css)
+        self.assertNotIn(".Pixso-paragraph-115_20", printing_css)
 
     def test_user_app_entry_exists_and_is_not_empty(self):
         path = BASE_DIR / "app.js"
@@ -78,7 +194,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         script = read_source(path)
         self.assertIn("EventSource", script, "sse-client.js should use the EventSource API")
 
-    def test_printer_fault_locking_contract_is_present_in_user_views(self):
+    def test_printer_fault_handling_stays_on_result_page(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
         login_view = read_source(BASE_DIR / "modules/views/login-view.js")
         runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
@@ -91,22 +207,66 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("isPrinterFaultResult", done_view)
         self.assertIn("printer_out_of_paper", done_view)
         self.assertIn("printer_out_of_toner", done_view)
-        self.assertIn("availabilityPollTimer", done_view)
-        self.assertIn("printerAvailability", login_view)
-        self.assertIn("setPrinterFaultLocked", login_view)
+        self.assertIn("donePrinterRefresh", done_view)
+        self.assertIn("checkPrinterAvailability", done_view)
+        self.assertNotIn("printerAvailability", login_view)
+        self.assertNotIn("setPrinterFaultLocked", login_view)
+        self.assertNotIn("availabilityPollTimer", login_view)
 
-    def test_cloud_availability_errors_use_the_countdown_without_retry_toast_text(self):
+    def test_homepage_qr_failures_retry_with_countdown_and_only_disable_during_fetch(self):
         login_view = read_source(BASE_DIR / "modules/views/login-view.js")
         runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
         api = read_source(BASE_DIR / "modules/shared/api.js")
 
-        self.assertIn("cloudAccessLocked", login_view)
-        self.assertIn("terminalActivationRequired", login_view)
-        self.assertIn("refreshQrCode({ automatic: true })", login_view)
+        self.assertIn("createMainCountdown", login_view)
+        self.assertNotIn("loginQrRetryCountdownSeconds", login_view)
+        self.assertNotIn("loginQrRetryCountdownSeconds", runtime)
+        self.assertNotIn("loginCountdownTimer", login_view)
+        self.assertNotIn("printerAvailability", login_view)
+        self.assertNotIn("checkPrinterAvailability", login_view)
+        self.assertNotIn("cloudAccessLocked", login_view)
+        self.assertNotIn("terminalActivationRequired", login_view)
+        self.assertIn('setQrCenterStatus("获取二维码中")', login_view)
+        self.assertRegex(login_view, r"if\s*\(loginQrRefreshing\)\s*return false;")
+        self.assertRegex(
+            login_view,
+            r"function\s+updateManualRefreshState\(\)\s*\{\s*setManualRefreshDisabled\(\s*loginQrRefreshing,?\s*\);",
+        )
+        refresh_body = login_view.split("async function refreshQrCode", 1)[1]
+        self.assertNotIn("loginCountdownValue", refresh_body)
+        self.assertIn("mainCountdown.stop()", login_view)
+        self.assertIn("startCountdown(60", login_view)
+        self.assertIn("startCountdown(10", login_view)
         self.assertNotIn("loginQrRetrySuffix", login_view)
         self.assertNotIn("loginQrRetrySuffix", runtime)
         self.assertIn('error.code = json?.error_code || json?.code || ""', api)
         self.assertIn("cloud_response_timeout", runtime)
+
+    def test_terminal_occupied_is_business_lock_without_auto_retry_countdown(self):
+        login_view = read_source(BASE_DIR / "modules/views/login-view.js")
+        occupied_body = login_view.split("function setTerminalOccupied", 1)[1].split(
+            "function setManualRefreshDisabled", 1
+        )[0]
+
+        self.assertIn("mainCountdown.stop()", occupied_body)
+        self.assertIn("setQrCenterStatus(message)", occupied_body)
+        self.assertNotIn("setLoginErrorCountdown", occupied_body)
+        self.assertNotIn("startCountdown", occupied_body)
+
+    def test_homepage_renders_all_qr_messages_in_the_qr_area_without_toasts(self):
+        login_view = read_source(BASE_DIR / "modules/views/login-view.js")
+        index_html = read_source(BASE_DIR / "Index.html")
+
+        self.assertNotIn("toast.js", login_view)
+        self.assertNotIn("showUserToast", login_view)
+        self.assertNotIn("hideUserToast", login_view)
+        self.assertNotIn("userToast", index_html)
+        self.assertFalse((BASE_DIR / "modules/shared/toast.js").exists())
+        self.assertIn('setQrCenterStatus("获取二维码中")', login_view)
+        self.assertRegex(
+            login_view,
+            r"function\s+setLoginErrorCountdown[\s\S]*?setQrCenterStatus\(message\)",
+        )
 
     def test_print_error_mapping_covers_cloud_availability_errors(self):
         runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
@@ -132,10 +292,11 @@ class UserPreviewAssetTests(unittest.TestCase):
     def test_done_action_buttons_match_preview_side_by_side_layout(self):
         done_css = read_source(BASE_DIR / "css/done.css")
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        preview_css = read_source(BASE_DIR / "css/preview.css")
 
         self.assertRegex(
             done_css,
-            r"\.done-continue-button\s*\{[^}]*width:\s*418px[^}]*height:\s*110px[^}]*left:\s*107px[^}]*top:\s*1700px",
+            r"\.Pixso-group-115_43\s*\{[^}]*width:\s*418px[^}]*height:\s*110px[^}]*left:\s*107px[^}]*top:\s*1700px",
         )
         self.assertRegex(
             done_css,
@@ -146,33 +307,82 @@ class UserPreviewAssetTests(unittest.TestCase):
             r"\.Pixso-group-115_40\.single-action\s*\{[^}]*left:\s*331px",
         )
         self.assertIn("single-action", done_view)
+        self.assertIn('class="Pixso-group-115_43"', done_view)
+        self.assertIn("done-secondary-action-surface", done_view)
+        self.assertNotIn("done-continue-button", done_view)
+        self.assertRegex(
+            preview_css,
+            r"\.Pixso-rectangle-97_455,\s*\.done-secondary-action-surface\s*\{",
+        )
 
-    def test_printer_fault_done_view_does_not_auto_restart_until_recovered(self):
+    def test_printer_fault_done_view_uses_main_countdown_until_recovered(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
 
         self.assertRegex(
             done_view,
-            r"if\s*\(\s*isPrinterFaultResult\(\)\s*\|\|\s*isUnconfirmedResult\(\)\s*\)\s*\{[\s\S]*?return;",
-            "printer fault result should short-circuit normal countdown restart",
+            r"if\s*\(\s*isPrinterFaultResult\(\)\s*\|\|\s*isUnconfirmedResult\(\)\s*\)\s*\{[\s\S]*?startCountdown\(10,\s*checkPrinterAvailability\)",
+            "printer fault result should use the main countdown to recheck",
         )
         self.assertIn("打印机已恢复", done_view)
 
-    def test_printer_fault_done_view_hides_countdown_accessory_before_and_after_recovery(self):
+    def test_done_view_uses_only_the_main_header_countdown(self):
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        done_css = read_source(BASE_DIR / "css/done.css")
+
+        self.assertIn('id="115_18"', done_view)
+        self.assertIn('class="Pixso-paragraph-115_20"', done_view)
+        self.assertNotIn('id="115_37"', done_view)
+        self.assertNotIn('id="115_38"', done_view)
+        self.assertNotIn('id="115_39"', done_view)
+        self.assertNotIn("setCountdownAccessoryVisible", done_view)
+        self.assertNotIn("秒后重试", done_view)
+        self.assertIn("createMainCountdown", done_view)
+        self.assertIn("doneCountdown", done_view)
+        self.assertNotIn(".Pixso-group-115_37", done_css)
+        self.assertNotIn(".Pixso-paragraph-115_39", done_css)
+
+    def test_printer_fault_uses_manual_refresh_and_main_countdown(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
 
-        self.assertIn("function setCountdownAccessoryVisible", done_view)
+        self.assertIn('id="donePrinterRefresh"', done_view)
+        self.assertIn("checkPrinterAvailability", done_view)
+        self.assertIn("on(\"donePrinterRefresh\"", done_view)
+        self.assertRegex(done_view, r"startCountdown\(10,\s*checkPrinterAvailability\)")
+        self.assertRegex(done_view, r"setReturnEnabled\(true\)[\s\S]*?setRefreshEnabled\(false\)")
+        self.assertRegex(done_view, r"startCountdown\(10,\s*leave\)")
+
+    def test_preview_loading_locks_controls_and_pauses_countdown_for_every_preview_request(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+
         self.assertRegex(
-            done_view,
-            r"if\s*\(\s*isPrinterFaultResult\(\)\s*\|\|\s*isUnconfirmedResult\(\)\s*\)\s*\{[\s\S]*?setCountdownAccessoryVisible\(false\)",
+            preview_view,
+            r"previewLoading\s*=\s*true;[\s\S]*?setPreviewControlsLocked\(true\);[\s\S]*?pausePreviewCountdown\(\);",
+        )
+        self.assertIn("!previewControlsLocked", preview_view)
+        self.assertRegex(
+            preview_view,
+            r"function\s+queuePreviewRefresh\(\)\s*\{[\s\S]*?previewLoading\s*\|\|\s*previewFailureMode",
         )
         self.assertRegex(
-            done_view,
-            r"打印机已恢复[\s\S]*?setCountdownAccessoryVisible\(false\)",
+            preview_view,
+            r"function\s+queuePreviewRefresh\(\)[\s\S]*?setPreviewControlsLocked\(true\);[\s\S]*?pausePreviewCountdown\(\);",
         )
-        self.assertRegex(
-            done_view,
-            r"if\s*\(\s*result\.type\s*===\s*\"error\"[\s\S]*?setCountdownAccessoryVisible\(true\)",
-        )
+        self.assertIn("await renderPreview(previewCurrentPage - 1, false)", preview_view)
+        self.assertIn("await renderPreview(previewCurrentPage + 1, false)", preview_view)
+        self.assertIn("resumePreviewCountdown(true)", preview_view)
+
+    def test_done_actions_use_loading_lock_without_changing_business_failure_lock(self):
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+
+        self.assertIn("let doneLoading = false", done_view)
+        self.assertIn("function beginLoading", done_view)
+        self.assertIn("createMainCountdown", done_view)
+        self.assertIn("setReturnEnabled(false)", done_view)
+        self.assertIn("mainCountdown.stop()", done_view)
+        self.assertIn("continueButton.disabled = true", done_view)
+        self.assertIn("isPrinterFaultResult", done_view)
+        self.assertIn("isUnconfirmedResult", done_view)
+        self.assertNotIn("setCountdownAccessoryVisible", done_view)
 
     def test_successful_prp_done_view_offers_continue_file_selection(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
@@ -275,8 +485,22 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn('prpSelection: "/api/prp/selection"', api)
         self.assertRegex(
             preview_view,
-            r'if\s*\(\s*isPRPSource\s*\)\s*\{[\s\S]*?postJson\(api\.prpSelection[\s\S]*?router\.go\("files"\)',
+            r'async\s+function\s+returnToFiles\s*\([^)]*\)\s*\{[\s\S]*?postJson\(api\.prpSelection[\s\S]*?router\.go\("files"\)',
         )
+        self.assertRegex(
+            preview_view,
+            r'if\s*\(\s*isPRPSource\s*\)\s*\{\s*void\s+returnToFiles\(\)',
+        )
+
+    def test_prp_preview_failure_returns_to_files_and_file_list_exposes_its_error(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+
+        self.assertIn("enterPreviewFailureMode", preview_view)
+        self.assertIn("startCountdown(10", preview_view)
+        self.assertNotIn("秒后重试", preview_view)
+        self.assertIn("文件列表获取失败：${reason}", files_view)
+        self.assertNotIn('error.message || "文件读取失败，请稍后重试。"', files_view)
 
     def test_prp_files_view_has_terminal_navigation_and_countdown(self):
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
@@ -284,9 +508,15 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn('id="filesCountdown"', files_view)
         self.assertIn('id="filesExit"', files_view)
         self.assertIn('aria-live="polite"', files_view)
-        self.assertIn("window.setInterval", files_view)
+        self.assertIn("createMainCountdown", files_view)
         self.assertIn("await restartCycle()", files_view)
-        self.assertIn("window.clearInterval", files_view)
+        self.assertIn("mainCountdown.destroy()", files_view)
+        self.assertIn("exit.disabled = busy", files_view)
+        self.assertIn("let loading = false", files_view)
+        self.assertIn("function beginLoading", files_view)
+        self.assertIn("startCountdown(60", files_view)
+        self.assertIn("startCountdown(10", files_view)
+        self.assertNotIn("pointerdown", files_view)
 
     def test_prp_files_view_guards_duplicate_and_stale_requests(self):
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
@@ -298,6 +528,52 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("signal: request.signal", files_view)
         self.assertIn("fetch(url, { cache: \"no-store\", ...options })", api)
 
+    def test_file_navigation_failures_use_countdown_retry_without_finite_attempts(self):
+        api = read_source(BASE_DIR / "modules/shared/api.js")
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        controller = read_source(BASE_DIR / "modules/app/app-controller.js")
+
+        self.assertIn("getJson(", files_view)
+        self.assertIn("createMainCountdown", files_view)
+        self.assertIn("startCountdown(60", files_view)
+        self.assertIn("startCountdown(10", files_view)
+        self.assertNotIn("isTransientRequestError(error)", files_view)
+        self.assertNotIn("filesRetryTimer", files_view)
+        self.assertNotIn("filesRetryCountdown", files_view)
+        self.assertNotIn("秒后重试", files_view)
+        self.assertRegex(files_view, r"async function exitToQrCode[\s\S]*?mainCountdown\.stop\(\)")
+        self.assertIn("let filesFailureMode = false", files_view)
+        self.assertNotIn("filesAutoRetryUsed", files_view)
+        self.assertIn("createMainCountdown", preview_view)
+        self.assertIn("startCountdown(60", preview_view)
+        self.assertIn("startCountdown(10", preview_view)
+        self.assertNotIn("previewRetryTimer", preview_view)
+        self.assertNotIn("previewRetryCountdown", preview_view)
+        self.assertNotIn("returnRetryTimer", preview_view)
+        self.assertNotIn("returnRetryCountdown", preview_view)
+        self.assertNotIn("秒后重试", preview_view)
+        self.assertNotIn("retryRequest", preview_view)
+        self.assertIn("postJson(api.prpSelection", preview_view)
+        self.assertNotIn("retryRequest", controller)
+        self.assertIn("postJson(api.prpSelection", controller)
+        self.assertNotIn("attempts:", api)
+
+    def test_business_locks_remain_separate_from_loading_locks(self):
+        login_view = read_source(BASE_DIR / "modules/views/login-view.js")
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+
+        self.assertIn("loginQrRefreshing", login_view)
+        self.assertIn("let loading = false", files_view)
+        self.assertIn("previewFailureMode", preview_view)
+        self.assertIn("let doneLoading = false", done_view)
+        self.assertRegex(
+            done_view,
+            r"isPrinterFaultResult\(\)\s*\|\|\s*isUnconfirmedResult\(\)",
+        )
+
     def test_prp_files_page_size_fits_the_terminal_canvas(self):
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
 
@@ -305,13 +581,19 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertNotIn("page_size=20", files_view)
 
     def test_prp_files_css_uses_the_terminal_canvas_and_visual_language(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
         files_css = read_source(BASE_DIR / "css/files.css")
 
         self.assertIn("width: 1080px", files_css)
         self.assertIn("min-height: 1920px", files_css)
-        self.assertIn(".files-terminal-card", files_css)
-        self.assertIn("linear-gradient", files_css)
+        self.assertIn('class="files-terminal-shell fill-bg-gradient"', files_view)
+        self.assertNotIn(".files-terminal-card", files_css)
+        self.assertNotIn("files-eyebrow", files_view)
+        self.assertNotIn("files-helper", files_view)
+        self.assertNotIn("files-security-note", files_view)
         self.assertIn(".files-countdown", files_css)
+        self.assertRegex(files_css, r"\.files-countdown\s*\{[^}]*width:\s*51px[^}]*height:\s*51px")
+        self.assertIn("preview__Ellipse_97_448.png", files_css)
 
     def test_removed_legacy_pages_do_not_reintroduce_duplicate_frontend_logic(self):
         self.assertFalse((BASE_DIR / "main.js").exists())
