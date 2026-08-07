@@ -25,6 +25,28 @@ export function supportsColor(capabilities) {
   });
 }
 
+const PAPER_SIZE_ALIASES = new Map([
+  ["iso_a3_297x420mm", "A3"],
+  ["iso_a4_210x297mm", "A4"],
+  ["iso_a5_148x210mm", "A5"],
+  ["iso_b5_176x250mm", "B5"],
+  ["na_letter_8.5x11in", "Letter"],
+  ["na_legal_8.5x14in", "Legal"],
+  ["na_ledger_11x17in", "Tabloid"],
+]);
+
+export function normalizePaperSizeCapability(value) {
+  const raw = String(value || "").trim();
+  return PAPER_SIZE_ALIASES.get(raw.toLowerCase()) || raw;
+}
+
+export function supportsPaperSize(capabilities, paperSize) {
+  const rawValues = capabilities?.page_size ?? capabilities?.paper_sizes;
+  if (!Array.isArray(rawValues) || rawValues.length === 0) return true;
+  const expected = String(paperSize || "").trim().toLowerCase();
+  return rawValues.some((value) => normalizePaperSizeCapability(value).toLowerCase() === expected);
+}
+
 export function applyPrinterCapabilityState(capabilities) {
   const capabilityState = {
     duplexSupported: supportsDuplex(capabilities),

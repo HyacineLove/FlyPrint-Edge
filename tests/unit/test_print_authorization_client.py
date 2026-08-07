@@ -28,6 +28,8 @@ class PrintAuthorizationClientTests(unittest.TestCase):
             "page_count": 3,
             "copies": 2,
             "paper_size": "A4",
+            "orientation": "landscape",
+            "scale_percent": 120,
             "color_mode": "color",
             "duplex_mode": "longedge",
             "printer_id": "11111111-1111-1111-1111-111111111111",

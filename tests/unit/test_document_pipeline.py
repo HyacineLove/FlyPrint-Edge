@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import fitz
-from PIL import Image
+from PIL import Image, ImageChops
 
 from printing.documents import (
     CanonicalDocument,
@@ -116,7 +116,7 @@ class DocumentPipelineTests(unittest.TestCase):
             canonical = pipeline.resolve_canonical(
                 DocumentIdentity(digest, source.name, "image/png"), lambda: source, delete_source=False,
             )
-            options = PrintOptions(paper_size="A4", scale_mode="fit", color_mode="color")
+            options = PrintOptions(paper_size="A4", orientation="portrait", scale_percent=100, color_mode="color")
             preview = pipeline.render_preview(canonical, options, 0)
             prepared = pipeline.prepare_print(canonical, options, "job-image")
             try:
@@ -124,6 +124,61 @@ class DocumentPipelineTests(unittest.TestCase):
                 self.assertEqual((993, 1404), preview.image.size)
             finally:
                 pipeline.cleanup(prepared)
+
+    def test_landscape_paper_layout_swaps_preview_dimensions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.pdf"
+            write_pdf(source)
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            pipeline = self.make_pipeline(root)
+            canonical = pipeline.resolve_canonical(
+                DocumentIdentity(digest, source.name), lambda: source, delete_source=False,
+            )
+
+            preview = pipeline.render_preview(
+                canonical,
+                PrintOptions(paper_size="A4", orientation="landscape", scale_percent=100, color_mode="color"),
+                0,
+            )
+
+            self.assertEqual((1404, 993), preview.image.size)
+
+    def test_print_scale_changes_the_content_rect_on_a4_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.pdf"
+            source_doc = fitz.open()
+            source_page = source_doc.new_page(width=300, height=500)
+            source_page.draw_rect(fitz.Rect(100, 200, 200, 300), color=(1, 0, 0), fill=(1, 0, 0))
+            source_doc.save(source)
+            source_doc.close()
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            pipeline = self.make_pipeline(root)
+            canonical = pipeline.resolve_canonical(
+                DocumentIdentity(digest, source.name), lambda: source, delete_source=False,
+            )
+
+            bounds = {}
+            for scale_percent in (50, 100, 150):
+                prepared = pipeline.prepare_print(
+                    canonical,
+                    PrintOptions(paper_size="A4", scale_percent=scale_percent),
+                    f"job-{scale_percent}",
+                )
+                try:
+                    with fitz.open(prepared.print_pdf) as document:
+                        pixmap = document[0].get_pixmap(matrix=fitz.Matrix(1, 1), alpha=False)
+                        rendered = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+                        bounds[scale_percent] = ImageChops.difference(
+                            rendered, Image.new("RGB", rendered.size, "white")
+                        ).getbbox()
+                        self.assertEqual((0.0, 0.0, 595.3, 841.9), tuple(round(value, 1) for value in document[0].rect))
+                finally:
+                    pipeline.cleanup(prepared)
+
+            self.assertLess(bounds[50][2] - bounds[50][0], bounds[100][2] - bounds[100][0])
+            self.assertLess(bounds[100][2] - bounds[100][0], bounds[150][2] - bounds[150][0])
 
     def test_same_key_concurrent_requests_download_and_convert_once(self):
         with tempfile.TemporaryDirectory() as tmp:

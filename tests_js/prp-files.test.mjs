@@ -47,3 +47,9 @@ test("PRP file page accepts PDF, image and DOCX metadata", () => {
 
   assert.equal(result.items.length, 3);
 });
+
+test("recognizes an expired portal session for a user-visible logout message", () => {
+  assert.equal(prpFiles.isPortalSessionInvalidError({ status: 401 }), true);
+  assert.equal(prpFiles.isPortalSessionInvalidError({ code: "portal_session_invalid" }), true);
+  assert.equal(prpFiles.isPortalSessionInvalidError({ status: 502 }), false);
+});

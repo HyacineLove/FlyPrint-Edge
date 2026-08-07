@@ -19,7 +19,7 @@ import fitz
 from PIL import Image
 
 from libreoffice_converter import convert_document_to_pdf
-from print_layout import PAPER_SIZES_MM, image_size_inches, normalize_paper_size
+from print_layout import PAPER_SIZES_MM, image_size_inches, is_landscape_paper_size, normalize_paper_size
 from .domain import ErrorCode, PreparedDocument, PrintError, PrintOptions, PrintRequest
 
 
@@ -219,10 +219,10 @@ class DocumentPipeline:
     ) -> PreparedDocument:
         started_at = time.perf_counter()
         self.logger.info(
-            "document_layout_options operation=print paper_size=%s scale_mode=%s max_upscale=%s",
+            "document_layout_options operation=print paper_size=%s orientation=%s scale_percent=%s",
             options.paper_size,
-            options.scale_mode,
-            options.max_upscale,
+            options.orientation,
+            options.scale_percent,
         )
         print_pdf = self.work_dir / f"{document_name}.pdf"
         with self.lease(canonical):
@@ -244,10 +244,10 @@ class DocumentPipeline:
         preview_pdf = self.work_dir / f"preview-{uuid.uuid4().hex}.pdf"
         try:
             self.logger.info(
-                "document_layout_options operation=preview paper_size=%s scale_mode=%s max_upscale=%s",
+                "document_layout_options operation=preview paper_size=%s orientation=%s scale_percent=%s",
                 options.paper_size,
-                options.scale_mode,
-                options.max_upscale,
+                options.orientation,
+                options.scale_percent,
             )
             with self.lease(canonical):
                 page_count = self._layout_pdf(canonical.pdf_path, preview_pdf, options)
@@ -365,6 +365,8 @@ class DocumentPipeline:
         size_mm = PAPER_SIZES_MM.get(paper_name)
         if not size_mm:
             raise PrintError(ErrorCode.DOCUMENT_PREPARATION_FAILED, f"unsupported paper: {paper_name}")
+        if options.orientation == "landscape" or is_landscape_paper_size(options.paper_size):
+            size_mm = (size_mm[1], size_mm[0])
         target_w, target_h = size_mm[0] * 72 / 25.4, size_mm[1] * 72 / 25.4
         source_doc = fitz.open(source)
         target_doc = fitz.open()
@@ -373,12 +375,7 @@ class DocumentPipeline:
                 page = target_doc.new_page(width=target_w, height=target_h)
                 source_rect = source_page.rect
                 sx, sy = target_w / source_rect.width, target_h / source_rect.height
-                if options.scale_mode == "fill":
-                    scale = min(max(sx, sy), options.max_upscale)
-                elif options.scale_mode == "actual":
-                    scale = min(1.0, sx, sy)
-                else:
-                    scale = min(min(sx, sy), options.max_upscale)
+                scale = min(sx, sy) * options.scale_percent / 100
                 width, height = source_rect.width * scale, source_rect.height * scale
                 rect = fitz.Rect(
                     (target_w - width) / 2,

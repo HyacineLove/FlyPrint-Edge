@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { normalizePRPFilePage } from "../../static/user/modules/app/prp-files.js";
+import { isPortalSessionInvalidError, normalizePRPFilePage } from "../../static/user/modules/app/prp-files.js";
 
 const item = {
   id: "file-1", name: "sample.pdf", media_type: "application/pdf", size: 12,
@@ -23,4 +23,10 @@ test("rejects credentials, malformed hashes, pagination and missing ids", () => 
   ]) {
     assert.throws(() => normalizePRPFilePage(payload));
   }
+});
+
+test("recognizes an expired portal session so the kiosk can explain the logout", () => {
+  assert.equal(isPortalSessionInvalidError({ status: 401 }), true);
+  assert.equal(isPortalSessionInvalidError({ code: "portal_session_invalid" }), true);
+  assert.equal(isPortalSessionInvalidError({ code: "network_error", status: 502 }), false);
 });

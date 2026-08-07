@@ -95,8 +95,8 @@ def upload_and_preview(file_path: Path, file_type: str) -> Dict[str, object]:
             "options": {
                 "page_index": 0,
                 "paper_size": "A4",
-                "scale_mode": "fit",
-                "max_upscale": 2.0,
+                "orientation": "portrait",
+                "scale_percent": 100,
             },
         },
         timeout=60,

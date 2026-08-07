@@ -19,6 +19,19 @@ function fileTypeLabel(mediaType) {
   return "图片";
 }
 
+const PORTAL_SESSION_INVALID_CODES = new Set([
+  "account_logged_out",
+  "identity_session_expired",
+  "portal_session_invalid",
+  "session_expired",
+  "unauthorized",
+]);
+
+export function isPortalSessionInvalidError(error) {
+  const code = String(error?.code || "").trim().toLowerCase();
+  return Number(error?.status) === 401 || PORTAL_SESSION_INVALID_CODES.has(code);
+}
+
 export function normalizePRPFilePage(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("文件列表无效");
   const { items, page, page_size: pageSize, total } = payload;
@@ -87,6 +100,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   let loading = false;
   let filesFailureMode = false;
   let exiting = false;
+  let loadingHintTimer = null;
   const sessionId = appState.session.session_id;
   const requestGate = createRequestGate();
   const panel = document.getElementById("filesPanel");
@@ -111,11 +125,17 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   function beginLoading() {
     loading = true;
     mainCountdown.stop("loading");
+    clearLoadingHintTimer();
+    setStatus("正在加载文件列表，请稍候...", "loading");
+    loadingHintTimer = window.setTimeout(() => {
+      if (loading) setStatus("网络较慢，文件列表仍在加载，请稍候...", "loading");
+    }, 3000);
     setBusy(true);
   }
 
   function endLoading({ releaseControls = true, retry = false, action = exitToQrCode } = {}) {
     loading = false;
+    clearLoadingHintTimer();
     if (!releaseControls) return;
     setBusy(false);
     if (retry) {
@@ -123,6 +143,18 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     } else {
       startCountdown(60, action);
     }
+  }
+
+  function clearLoadingHintTimer() {
+    if (loadingHintTimer) {
+      window.clearTimeout(loadingHintTimer);
+      loadingHintTimer = null;
+    }
+  }
+
+  function setStatus(message, kind = "") {
+    status.textContent = message;
+    status.dataset.statusKind = kind;
   }
 
   function setBusy(busy) {
@@ -159,8 +191,8 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     if (!request) return;
     filesFailureMode = false;
     let loaded = false;
+    let failureAction = () => load(page);
     beginLoading();
-    status.textContent = "";
     list.replaceChildren();
     try {
       const data = normalizePRPFilePage(await getJson(
@@ -173,7 +205,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       currentPage = data.page;
       pageCount = Math.max(1, Math.ceil(data.total / data.page_size));
       document.getElementById("filesPage").textContent = `${currentPage} / ${pageCount}`;
-      status.textContent = data.items.length ? "" : "暂无文件，请先上传";
+      setStatus(data.items.length ? "" : "暂无文件，请先上传", data.items.length ? "" : "empty");
       for (const item of data.items) {
         const row = document.createElement("button");
         row.type = "button";
@@ -202,13 +234,18 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       if (sessionIsCurrent(request) && error?.name !== "AbortError") {
         filesFailureMode = true;
         const reason = String(error?.message || "请稍后重试。").trim();
-        status.textContent = `文件列表获取失败：${reason}`;
+        if (isPortalSessionInvalidError(error)) {
+          failureAction = exitToQrCode;
+          setStatus("账号已退出，请返回首页重新登录", "session-expired");
+        } else {
+          setStatus(`文件列表获取失败：${reason}`, "error");
+        }
       }
     } finally {
       if (requestGate.finish(request)) {
         endLoading({
           retry: !loaded,
-          action: loaded ? exitToQrCode : () => load(page),
+          action: loaded ? exitToQrCode : failureAction,
         });
       }
     }
@@ -219,8 +256,8 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     if (!request) return;
     filesFailureMode = false;
     let selected = false;
+    let failureAction = () => select(item);
     beginLoading();
-    status.textContent = "";
     try {
       const result = await postJson(`${api.prpFiles}/${encodeURIComponent(item.id)}/select`, {
         session_id: sessionId,
@@ -242,13 +279,18 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       if (sessionIsCurrent(request) && error?.name !== "AbortError") {
         filesFailureMode = true;
         const reason = String(error?.message || "请稍后重试").trim();
-        status.textContent = `选择文件失败：${reason}`;
+        if (isPortalSessionInvalidError(error)) {
+          failureAction = exitToQrCode;
+          setStatus("账号已退出，请返回首页重新登录", "session-expired");
+        } else {
+          setStatus(`选择文件失败：${reason}`, "error");
+        }
       }
     } finally {
       if (requestGate.finish(request)) {
         endLoading({
           retry: !selected,
-          action: selected ? exitToQrCode : () => select(item),
+          action: selected ? exitToQrCode : failureAction,
         });
       }
     }
@@ -262,6 +304,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   return {
     destroy() {
       mainCountdown.destroy();
+      clearLoadingHintTimer();
       requestGate.cancel();
     },
   };

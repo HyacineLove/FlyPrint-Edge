@@ -29,11 +29,18 @@ export function clearBg(id) {
 }
 
 export function setPreviewBg(id, url) {
-  const el = q(id);
+  const el = q("preview-document-layer") || q(id);
   if (!el || !url) return;
   el.style.backgroundImage = `url(${url})`;
   el.style.backgroundSize = "contain";
   el.style.backgroundPosition = "center";
   el.style.backgroundRepeat = "no-repeat";
   el.style.backgroundColor = "#ffffff";
+}
+
+export function setPreviewScale(id, percent) {
+  const el = q("preview-document-layer") || q(id);
+  if (!el) return;
+  const scale = Math.max(0.5, Math.min(1.5, Number(percent || 100) / 100));
+  el.style.transform = `scale(${scale})`;
 }

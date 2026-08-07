@@ -152,18 +152,9 @@ function renderSettingsSection(state) {
         <input id="settings_default_paper_size" data-section="settings" data-key="default_paper_size" value="${escapeHtml(cfg.default_paper_size || "A4")}">
       </div>
       <div class="field">
-        <label for="settings_default_scale_mode">默认缩放模式</label>
-        <select id="settings_default_scale_mode" data-section="settings" data-key="default_scale_mode">
-          ${[
-            ["actual", "原始尺寸/过大缩小"],
-            ["fit", "适合纸张"],
-            ["fill", "填满纸张"],
-          ].map(([mode, label]) => `<option value="${mode}" ${String(cfg.default_scale_mode || "fit") === mode ? "selected" : ""}>${label}</option>`).join("")}
-        </select>
-      </div>
-      <div class="field">
-        <label for="settings_default_max_upscale">最大放大倍数</label>
-        <input id="settings_default_max_upscale" type="number" min="0.1" step="0.1" data-section="settings" data-key="default_max_upscale" value="${escapeHtml(cfg.default_max_upscale ?? 3.0)}">
+        <label for="settings_default_scale_percent">默认缩放</label>
+        <input id="settings_default_scale_percent" type="number" min="50" max="150" step="10" data-section="settings" data-key="default_scale_percent" value="${escapeHtml(cfg.default_scale_percent ?? 100)}">
+        <span class="field-hint">50%–150%，每次调整 10%。</span>
       </div>
       <div class="field">
         <label for="settings_copies_min">最小打印份数</label>

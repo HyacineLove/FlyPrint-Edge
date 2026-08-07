@@ -779,6 +779,19 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   background-color: rgba(255, 255, 255, 1);
   border-radius: 12px;
   border: 1px solid rgba(224, 224, 232, 1);
+  overflow: hidden;
+}
+
+#preview-document-layer {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-color: #ffffff;
+  transform-origin: center;
+  transition: transform 120ms ease;
+  pointer-events: none;
 }
 
 .Pixso-rectangle-115_59 {
@@ -861,6 +874,100 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   border: 0;
   padding: 0;
   background: transparent;
+}
+
+/* 参数区按两列排列，触摸区域保持统一尺寸。 */
+.preview-options-panel {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: repeat(3, 134px);
+  gap: 18px;
+  width: 867px !important;
+  height: 438px !important;
+  left: 107px !important;
+  top: 1167px !important;
+}
+
+.preview-option-card {
+  position: relative !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0;
+  padding: 18px 24px;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.preview-option-card--color {
+  grid-column: 1 / -1;
+}
+
+.preview-option-label {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0;
+  color: rgba(0, 0, 0, 1) !important;
+  font: 400 32px/1.2 "Microsoft YaHei-Regular" !important;
+  white-space: nowrap;
+  transform: none !important;
+}
+
+.preview-option-choices,
+.preview-copies-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 16px;
+}
+
+.preview-choice-button {
+  min-width: 104px;
+  height: 88px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  color: rgba(0, 0, 0, 1);
+  background: rgba(244, 244, 244, 1);
+  font: 400 30px/1 "Microsoft YaHei-Regular";
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+}
+
+.preview-choice-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.preview-choice-button.is-selected {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end));
+}
+
+.preview-choice-button:disabled,
+.preview-choice-button.is-option-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.preview-step-button {
+  min-width: 78px;
+  width: 78px;
+  padding: 0;
+  color: #5f67bd;
+  font-size: 46px;
+  font-weight: 700;
+}
+
+.preview-copies-value {
+  display: inline-flex;
+  width: 64px;
+  justify-content: center;
+  color: #25305b;
+  font: 700 38px/1 "Microsoft YaHei-Bold";
+  font-variant-numeric: tabular-nums;
 }
 
 .Pixso-group-97_447 .ui-countdown-ring {

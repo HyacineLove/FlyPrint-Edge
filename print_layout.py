@@ -14,6 +14,9 @@ PAPER_SIZES_MM = {
 }
 
 DEFAULT_IMAGE_DPI = 300.0
+MIN_SCALE_PERCENT = 50
+MAX_SCALE_PERCENT = 150
+SCALE_STEP_PERCENT = 10
 
 
 def safe_float(value: Any, default: float) -> float:
@@ -23,36 +26,47 @@ def safe_float(value: Any, default: float) -> float:
         return default
 
 
-def normalize_scale_mode(value: Any, default: str = "fit") -> str:
-    mode = str(value or "").strip().lower()
-    return mode if mode in {"fit", "actual", "fill"} else default
+def normalize_orientation(value: Any, default: str = "portrait") -> str:
+    orientation = str(value or "").strip().lower()
+    return orientation if orientation in {"portrait", "landscape"} else default
+
+
+def normalize_scale_percent(value: Any, default: int = 100) -> int:
+    try:
+        percent = int(float(value))
+    except (TypeError, ValueError):
+        percent = default
+    percent = min(MAX_SCALE_PERCENT, max(MIN_SCALE_PERCENT, percent))
+    return int(round(percent / SCALE_STEP_PERCENT) * SCALE_STEP_PERCENT)
+
+
+def is_landscape_paper_size(paper_size: Optional[str]) -> bool:
+    raw = str(paper_size or "").strip().lower()
+    return "(横向)" in raw or "（横向）" in raw or "(landscape)" in raw
 
 
 def normalize_paper_size(paper_size: Optional[str]) -> str:
     value = str(paper_size or "").strip()
-    if " (横向)" in value or " (landscape)" in value.lower():
+    if is_landscape_paper_size(value):
         value = value.split(" (")[0].strip()
+        value = value.split("（")[0].strip()
     return value
 
 
 def paper_size_px(paper_size: Optional[str], dpi: int = 120) -> Optional[tuple[int, int]]:
-    raw = str(paper_size or "").strip()
-    is_landscape = (" (横向)" in raw) or ("(landscape)" in raw.lower())
     mm = PAPER_SIZES_MM.get(normalize_paper_size(paper_size))
     if not mm:
         return None
-    if is_landscape:
+    if is_landscape_paper_size(paper_size):
         mm = (mm[1], mm[0])
     return int(mm[0] / 25.4 * dpi), int(mm[1] / 25.4 * dpi)
 
 
 def paper_size_inches(paper_size: Optional[str]) -> Optional[tuple[float, float]]:
-    raw = str(paper_size or "").strip()
-    is_landscape = (" (妯悜)" in raw) or ("(landscape)" in raw.lower())
     mm = PAPER_SIZES_MM.get(normalize_paper_size(paper_size))
     if not mm:
         return None
-    if is_landscape:
+    if is_landscape_paper_size(paper_size):
         mm = (mm[1], mm[0])
     return mm[0] / 25.4, mm[1] / 25.4
 
@@ -83,18 +97,19 @@ def resolve_layout_options(
     if paper_size:
         paper_size = str(paper_size).strip()
 
-    default_scale_mode = normalize_scale_mode(defaults.get("default_scale_mode"), "fit")
-    scale_mode = normalize_scale_mode(opts.get("scale_mode"), default_scale_mode)
-
-    default_max_upscale = safe_float(defaults.get("default_max_upscale"), 3.0)
-    max_upscale = safe_float(opts.get("max_upscale"), default_max_upscale)
-    if max_upscale <= 0:
-        max_upscale = default_max_upscale if default_max_upscale > 0 else 3.0
+    scale_percent = normalize_scale_percent(
+        opts.get("scale_percent", defaults.get("default_scale_percent", 100)),
+        100,
+    )
+    orientation_value = opts.get("orientation")
+    if orientation_value in (None, "") and is_landscape_paper_size(str(paper_size)):
+        orientation_value = "landscape"
+    orientation = normalize_orientation(orientation_value, "portrait")
 
     return {
         "paper_size": paper_size,
-        "scale_mode": scale_mode,
-        "max_upscale": max_upscale,
+        "orientation": orientation,
+        "scale_percent": scale_percent,
     }
 
 

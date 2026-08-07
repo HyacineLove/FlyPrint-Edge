@@ -42,8 +42,8 @@ export function configModel(state) {
 }
 
 export function buildConfigPayloadFromConfig(cfg) {
-  const rawMaxUpscale = cfg.settings.default_max_upscale;
-  const normalizedMaxUpscale = rawMaxUpscale === "" || rawMaxUpscale == null ? "" : Number(rawMaxUpscale);
+  const rawScalePercent = cfg.settings.default_scale_percent;
+  const normalizedScalePercent = rawScalePercent === "" || rawScalePercent == null ? 100 : Number(rawScalePercent);
   const rawCopiesMin = cfg.settings.copies_min;
   const rawCopiesMax = cfg.settings.copies_max;
   const normalizedCopiesMin = rawCopiesMin === "" || rawCopiesMin == null ? "" : Number(rawCopiesMin);
@@ -64,8 +64,7 @@ export function buildConfigPayloadFromConfig(cfg) {
     },
     settings: {
       default_paper_size: cfg.settings.default_paper_size || "",
-      default_scale_mode: cfg.settings.default_scale_mode || "",
-      default_max_upscale: normalizedMaxUpscale,
+      default_scale_percent: normalizedScalePercent,
       copies_min: normalizedCopiesMin,
       copies_max: normalizedCopiesMax,
       max_file_size_bytes: normalizedMaxFileSizeBytes,

@@ -98,7 +98,7 @@ class CloudPrintAdapterTests(unittest.TestCase):
         handler = self.make_handler()
         handler.interactive_job_binder = Mock(return_value={
             "session_id": "session-1",
-            "print_options": {"scale_mode": "actual", "paper_size": "A4"},
+            "print_options": {"orientation": "landscape", "scale_percent": 80, "paper_size": "A4"},
         })
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "invoice.pdf"
@@ -108,7 +108,8 @@ class CloudPrintAdapterTests(unittest.TestCase):
             ), patch.object(handler, "_start_ipp_print_service") as start:
                 handler.handle_print_job(self.message())
 
-        self.assertEqual("actual", start.call_args.kwargs["print_options"]["scale_mode"])
+        self.assertEqual("landscape", start.call_args.kwargs["print_options"]["orientation"])
+        self.assertEqual(80, start.call_args.kwargs["print_options"]["scale_percent"])
 
     @staticmethod
     def download_response(chunks):

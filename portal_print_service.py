@@ -77,7 +77,9 @@ class PortalPrintService:
             "file_display_name": session_snapshot.get("file_name") or file_id,
             "page_count": int(session_snapshot["page_count"]),
             "copies": normalized.copies,
-            "paper_size": normalized.paper_size,
+            "paper_size": "A4",
+            "orientation": normalized.orientation,
+            "scale_percent": normalized.scale_percent,
             "color_mode": normalized.color_mode,
             "duplex_mode": normalized.duplex,
             "printer_id": str(printer.get("cloud_id") or ""),
@@ -117,13 +119,20 @@ class PortalPrintService:
             )
 
         try:
+            # PRP 终端本期固定使用 A4；授权和本地实际排版必须共享同一组参数。
+            local_print_options = {
+                **dict(options or {}),
+                "paper_size": "A4",
+                "orientation": normalized.orientation,
+                "scale_percent": normalized.scale_percent,
+            }
             request = build_print_request(
                 self.config_repo,
                 job_id=job_id,
                 printer_id=str(printer.get("id") or ""),
                 file_path=None,
                 source_name=session_snapshot.get("file_name") or file_id,
-                print_options=options,
+                print_options=local_print_options,
                 content_hash=session_snapshot["content_hash"],
                 source_kind=session_snapshot.get("file_type") or "",
                 source_supplier=cache_miss,

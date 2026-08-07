@@ -168,7 +168,7 @@ class InteractiveSessionManagerTests(unittest.TestCase):
             "terminal_session_id": session["session_id"],
             "terminal_ticket_hash": "e" * 64,
         })
-        options = {"paper_size": "A4", "scale_mode": "actual", "color_mode": "mono"}
+        options = {"paper_size": "A4", "orientation": "landscape", "scale_percent": 80, "color_mode": "mono"}
         self.manager.mark_print_submitted(session["session_id"], "file-1", options)
 
         bound = self.manager.attach_cloud_job(file_url, "job-1")

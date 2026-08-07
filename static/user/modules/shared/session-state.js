@@ -1,17 +1,44 @@
 const stateKey = "fly_print_state";
 
 export const defaultPaperSize = "A4";
-export const defaultScaleMode = "fit";
-export const defaultMaxUpscale = 3;
+export const defaultOrientation = "portrait";
+export const minScalePercent = 50;
+export const maxScalePercent = 150;
+export const scaleStepPercent = 10;
+
+export function normalizeOrientation(value) {
+  const orientation = String(value || "").trim().toLowerCase();
+  return orientation === "landscape" || orientation === "横向" ? "landscape" : defaultOrientation;
+}
+
+export function orientationFromPaperSize(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw.includes("(landscape)") || raw.includes("横向")
+    ? "landscape"
+    : defaultOrientation;
+}
+
+export function normalizePaperSize(value, fallback = defaultPaperSize) {
+  const raw = String(value || "").trim();
+  const base = raw.replace(/\s*[\uFF08(](?:\u6A2A\u5411|landscape)[\uFF09)]\s*$/i, "").trim();
+  return base || fallback;
+}
+
+export function normalizeScalePercent(value, fallback = 100) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const stepped = Math.round(parsed / scaleStepPercent) * scaleStepPercent;
+  return Math.min(maxScalePercent, Math.max(minScalePercent, stepped));
+}
 
 export function createDefaultOptions() {
   return {
     copies: 1,
     duplex: "simplex",
     color_mode: "color",
-    scale_mode: defaultScaleMode,
     paper_size: defaultPaperSize,
-    max_upscale: defaultMaxUpscale,
+    orientation: defaultOrientation,
+    scale_percent: 100,
   };
 }
 
@@ -36,17 +63,6 @@ function loadState() {
   }
 }
 
-export function normalizeScaleMode(value) {
-  const mode = String(value || "").toLowerCase();
-  if (mode === "actual" || mode === "fill" || mode === "fit") return mode;
-  return defaultScaleMode;
-}
-
-export function normalizeMaxUpscale(value) {
-  const num = Number(value);
-  return Number.isFinite(num) && num > 0 ? num : defaultMaxUpscale;
-}
-
 export function normalizeOpsContacts(rawContacts) {
   if (!Array.isArray(rawContacts)) return [];
   return rawContacts
@@ -69,8 +85,7 @@ export function normalizeRuntimeSettings(rawSettings) {
   const maxDocumentPages = Math.max(0, Number.parseInt(settings.max_document_pages, 10) || 0);
   const maxListItems = Math.max(0, Number.parseInt(settings.max_list_items, 10) || 0);
   const defaultPaper = String(settings.default_paper_size || defaultPaperSize);
-  const defaultScale = normalizeScaleMode(settings.default_scale_mode || defaultScaleMode);
-  const defaultMax = normalizeMaxUpscale(settings.default_max_upscale);
+  const defaultScalePercent = normalizeScalePercent(settings.default_scale_percent, 100);
   return {
     copies_min: copiesMin,
     copies_max: copiesMax,
@@ -78,8 +93,7 @@ export function normalizeRuntimeSettings(rawSettings) {
     max_document_pages: maxDocumentPages,
     max_list_items: maxListItems,
     default_paper_size: defaultPaper,
-    default_scale_mode: defaultScale,
-    default_max_upscale: defaultMax,
+    default_scale_percent: defaultScalePercent,
     ops_contacts: normalizeOpsContacts(settings.ops_contacts),
   };
 }
@@ -127,9 +141,9 @@ export function ensureStateOptions() {
     ...(state.options && typeof state.options === "object" ? state.options : {}),
   };
   merged.copies = normalizeCopies(merged.copies);
-  merged.scale_mode = normalizeScaleMode(merged.scale_mode);
-  merged.paper_size = String(merged.paper_size || defaultPaperSize);
-  merged.max_upscale = normalizeMaxUpscale(merged.max_upscale);
+  merged.paper_size = defaultPaperSize;
+  merged.orientation = normalizeOrientation(merged.orientation);
+  merged.scale_percent = normalizeScalePercent(merged.scale_percent);
   state.options = merged;
 }
 

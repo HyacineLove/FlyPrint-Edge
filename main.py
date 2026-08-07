@@ -765,8 +765,7 @@ def _build_qr_runtime_settings(settings: Optional[Dict[str, Any]] = None) -> Dic
         "copies_max": copies_max,
         **normalize_local_limits(runtime_settings),
         "default_paper_size": layout_defaults["paper_size"],
-        "default_scale_mode": layout_defaults["scale_mode"],
-        "default_max_upscale": layout_defaults["max_upscale"],
+        "default_scale_percent": layout_defaults["scale_percent"],
         "ops_contacts": _get_ops_contacts(),
     }
 
@@ -1457,6 +1456,7 @@ async def submit_print(request: Request):
             cloud_duplex = to_cloud_duplex(options.get("duplex"))
             if cloud_duplex:
                 options["duplex_mode"] = cloud_duplex
+            options["paper_size"] = "A4"
             logger.info(
                 "Interactive print options normalized: file_id=%s printer_id=%s options=%r",
                 file_id,

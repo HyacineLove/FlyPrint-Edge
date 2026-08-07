@@ -7,6 +7,7 @@ import requests
 
 from edge_limits import normalize_local_limits
 from logging_utils import VALID_LOG_LEVELS
+from print_layout import normalize_scale_percent
 from url_scheme import is_http_or_https_url
 
 
@@ -40,8 +41,8 @@ class ConfigService:
         cloud.pop("credential_blob", None)
         cloud["activated"] = bool(cloud.get("node_id") and credential_blob)
         settings = data.setdefault("settings", {})
-        settings["default_max_upscale"] = self._normalize_optional_positive_number(
-            settings.get("default_max_upscale")
+        settings["default_scale_percent"] = normalize_scale_percent(
+            settings.get("default_scale_percent"), 100
         )
         settings["copies_min"], settings["copies_max"] = self._normalize_copy_limits(
             settings.get("copies_min"),
@@ -121,15 +122,13 @@ class ConfigService:
         except (TypeError, ValueError):
             errors.append("cloud.heartbeat_interval must be a positive integer")
 
-        if settings.get("default_scale_mode") not in (None, "", "fit", "actual", "fill"):
-            errors.append("settings.default_scale_mode must be fit, actual, or fill")
-
-        if settings.get("default_max_upscale") not in (None, ""):
+        if settings.get("default_scale_percent") not in (None, ""):
             try:
-                if float(settings["default_max_upscale"]) <= 0:
+                scale_percent = int(settings["default_scale_percent"])
+                if scale_percent < 50 or scale_percent > 150 or scale_percent % 10 != 0:
                     raise ValueError
             except (TypeError, ValueError):
-                errors.append("settings.default_max_upscale must be a positive number")
+                errors.append("settings.default_scale_percent must be an integer from 50 to 150 in 10 percent steps")
 
         if settings.get("log_level") not in (None, "", *VALID_LOG_LEVELS):
             errors.append("settings.log_level must be DEBUG, INFO, WARNING, or ERROR")

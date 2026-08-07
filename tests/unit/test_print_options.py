@@ -23,6 +23,14 @@ class PrintOptionsTests(unittest.TestCase):
         self.assertEqual(to_cloud_duplex("longedge"), "duplex")
         self.assertEqual(to_cloud_duplex("shortedge"), "duplex")
 
+    def test_landscape_paper_uses_the_same_ipp_media_as_portrait(self):
+        from printing.domain import PrintOptions
+
+        self.assertEqual(
+            PrintOptions(paper_size="A4 (横向)").ipp_media,
+            PrintOptions(paper_size="A4").ipp_media,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

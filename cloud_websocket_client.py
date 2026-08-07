@@ -894,8 +894,8 @@ class PrintJobHandler:
                 "color_mode": "color_mode",
                 "duplex": "duplex_mode",  # 注意字段名映射
                 "page_count": "page_count",
-                "scale_mode": "scale_mode",
-                "max_upscale": "max_upscale"
+                "orientation": "orientation",
+                "scale_percent": "scale_percent"
             }
 
             for option_key, data_key in fields_mapping.items():

@@ -96,8 +96,8 @@ def call_preview(edge_base_url: str, file_id: str, file_url: str, file_name: str
         "options": {
             "page_index": 0,
             "paper_size": "A4",
-            "scale_mode": "fit",
-            "max_upscale": 2.0,
+            "orientation": "portrait",
+            "scale_percent": 100,
         },
     }
     started = time.perf_counter()

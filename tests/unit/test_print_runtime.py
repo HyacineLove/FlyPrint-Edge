@@ -16,8 +16,7 @@ class DummyConfig:
         return {
             "settings": {
                 "default_paper_size": "Letter",
-                "default_scale_mode": "actual",
-                "default_max_upscale": 1.25,
+                "default_scale_percent": 120,
             }
         }
 
@@ -34,8 +33,8 @@ class PrintRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual("Letter", request.options.paper_size)
-        self.assertEqual("actual", request.options.scale_mode)
-        self.assertEqual(1.25, request.options.max_upscale)
+        self.assertEqual("portrait", request.options.orientation)
+        self.assertEqual(120, request.options.scale_percent)
 
 
 if __name__ == "__main__":

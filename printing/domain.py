@@ -5,6 +5,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
+from print_layout import (
+    is_landscape_paper_size,
+    normalize_orientation,
+    normalize_paper_size,
+    normalize_scale_percent,
+)
 from print_options import normalize_print_options
 
 
@@ -109,8 +115,8 @@ class PrintOptions:
     duplex: str = "simplex"
     color_mode: str = "mono"
     paper_size: str = "A4"
-    scale_mode: str = "fit"
-    max_upscale: float = 3.0
+    orientation: str = "portrait"
+    scale_percent: int = 100
 
     @classmethod
     def from_mapping(cls, value: Optional[Mapping[str, Any]]) -> "PrintOptions":
@@ -125,14 +131,13 @@ class PrintOptions:
         color = str(raw.get("color_mode") or "mono")
         if color not in {"mono", "color"}:
             color = "mono"
-        scale = str(raw.get("scale_mode") or "fit").lower()
-        if scale not in {"fit", "actual", "fill"}:
-            scale = "fit"
-        try:
-            max_upscale = max(0.01, float(raw.get("max_upscale", 3.0)))
-        except (TypeError, ValueError):
-            max_upscale = 3.0
-        return cls(copies, duplex, color, str(raw.get("paper_size") or raw.get("page_size") or "A4"), scale, max_upscale)
+        raw_paper_size = str(raw.get("paper_size") or raw.get("page_size") or "A4")
+        orientation = normalize_orientation(
+            raw.get("orientation") or ("landscape" if is_landscape_paper_size(raw_paper_size) else "portrait")
+        )
+        paper_size = normalize_paper_size(raw_paper_size) or "A4"
+        scale_percent = normalize_scale_percent(raw.get("scale_percent"), 100)
+        return cls(copies, duplex, color, paper_size, orientation, scale_percent)
 
     @property
     def ipp_sides(self) -> str:
@@ -144,7 +149,7 @@ class PrintOptions:
 
     @property
     def ipp_media(self) -> str:
-        return MEDIA_BY_PAPER.get(self.paper_size, "")
+        return MEDIA_BY_PAPER.get(normalize_paper_size(self.paper_size), "")
 
 
 @dataclass(frozen=True)

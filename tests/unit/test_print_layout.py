@@ -10,6 +10,7 @@ from print_layout import (
     compute_physical_fit_rect,
     compute_scaled_size,
     image_size_inches,
+    paper_size_inches,
     paper_size_px,
     resolve_layout_options,
 )
@@ -20,25 +21,30 @@ class PrintLayoutTests(unittest.TestCase):
         layout = resolve_layout_options(
             {
                 "paper_size": "Letter",
-                "scale_mode": "actual",
-                "max_upscale": "9",
+                "orientation": "landscape",
+                "scale_percent": 150,
             },
             {
                 "default_paper_size": "A4",
-                "default_scale_mode": "fill",
-                "default_max_upscale": 2,
+                "default_scale_percent": 80,
             },
         )
 
         self.assertEqual(
-            {"paper_size": "Letter", "scale_mode": "actual", "max_upscale": 9.0},
+            {"paper_size": "Letter", "orientation": "landscape", "scale_percent": 150},
             layout,
         )
 
-    def test_default_scale_mode_is_fit_when_not_configured(self):
-        layout = resolve_layout_options({}, {})
+    def test_default_scale_percent_comes_from_runtime_settings(self):
+        layout = resolve_layout_options({}, {"default_scale_percent": 70})
 
-        self.assertEqual("fit", layout["scale_mode"])
+        self.assertEqual("portrait", layout["orientation"])
+        self.assertEqual(70, layout["scale_percent"])
+
+    def test_scale_percent_is_normalized_to_supported_range_and_step(self):
+        self.assertEqual(50, resolve_layout_options({"scale_percent": 40})["scale_percent"])
+        self.assertEqual(100, resolve_layout_options({"scale_percent": 96})["scale_percent"])
+        self.assertEqual(150, resolve_layout_options({"scale_percent": 160})["scale_percent"])
 
     def test_paper_size_px_preserves_landscape_suffix(self):
         portrait = paper_size_px("A4", dpi=120)
@@ -46,6 +52,10 @@ class PrintLayoutTests(unittest.TestCase):
 
         self.assertEqual((992, 1403), portrait)
         self.assertEqual((1403, 992), landscape)
+
+    def test_paper_size_inches_preserves_landscape_suffix(self):
+        self.assertEqual((210 / 25.4, 297 / 25.4), paper_size_inches("A4"))
+        self.assertEqual((297 / 25.4, 210 / 25.4), paper_size_inches("A4 (横向)"))
 
     def test_compute_scaled_size_is_shared_fit_fill_actual_contract(self):
         self.assertEqual((500, 250, 0.5), compute_scaled_size(1000, 500, 500, 500, "fit", 3.0))

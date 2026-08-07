@@ -426,15 +426,13 @@ class UserPreviewPrintApiTests(unittest.TestCase):
     def test_qr_runtime_settings_include_layout_defaults(self):
         self.printer_manager.config.config["settings"].update({
             "default_paper_size": "Letter",
-            "default_scale_mode": "fit",
-            "default_max_upscale": 1.25,
+            "default_scale_percent": 120,
         })
         with patch.object(main, "printer_manager", self.printer_manager):
             settings = main._build_qr_runtime_settings()
 
         self.assertEqual("Letter", settings["default_paper_size"])
-        self.assertEqual("fit", settings["default_scale_mode"])
-        self.assertEqual(1.25, settings["default_max_upscale"])
+        self.assertEqual(120, settings["default_scale_percent"])
 
 
 if __name__ == "__main__":

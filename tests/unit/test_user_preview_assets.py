@@ -419,13 +419,25 @@ class UserPreviewAssetTests(unittest.TestCase):
         preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
         main = read_source("main.py")
 
-        self.assertIn('defaultScaleMode = "fit"', session_state)
-        self.assertIn("原始尺寸/过大缩小", admin_settings)
-        self.assertIn('cfg.default_scale_mode || "fit"', admin_settings)
-        self.assertIn("default_scale_mode", main)
-        self.assertIn("default_max_upscale", main)
-        self.assertIn("runtimeSettings.default_scale_mode", preview_view)
-        self.assertIn("runtimeSettings.default_max_upscale", preview_view)
+        self.assertIn("default_scale_percent", session_state)
+        self.assertIn("默认缩放", admin_settings)
+        self.assertIn("cfg.default_scale_percent", admin_settings)
+        self.assertIn("default_scale_percent", main)
+        self.assertIn("runtimeSettings.default_scale_percent", preview_view)
+        self.assertIn('id="preview-scale-decrease"', preview_view)
+        self.assertNotIn("default_scale_mode", preview_view)
+        self.assertNotIn("default_max_upscale", preview_view)
+
+    def test_scale_change_updates_cached_preview_layer_without_refreshing_preview(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        self.assertRegex(
+            preview_view,
+            r"const changeScale = \(delta\) => \{[\s\S]*?saveSessionState\(\);[\s\S]*?renderOptionsUI\(\);[\s\S]*?\n  \};",
+        )
+        change_scale = preview_view.split("const changeScale = (delta) =>", 1)[1].split("const pickColor", 1)[0]
+        self.assertNotIn("queuePreviewRefresh", change_scale)
+        self.assertIn("setPreviewScale(\"115_58\", scalePercent)", preview_view)
+        self.assertIn("scale_percent: forPreview ? 100", preview_view)
 
     def test_printing_indicator_is_full_width_and_uses_device_page_progress(self):
         view = read_source(BASE_DIR / "modules/views/printing-view.js")

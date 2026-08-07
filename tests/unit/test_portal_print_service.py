@@ -77,8 +77,7 @@ class DummyConfig:
         return {
             "settings": {
                 "default_paper_size": "Letter",
-                "default_scale_mode": "actual",
-                "default_max_upscale": 1.25,
+                "default_scale_percent": 120,
             }
         }
 
@@ -189,10 +188,12 @@ class PortalPrintServiceTests(unittest.TestCase):
         self.assertTrue(result["success"])
         authorization_payload = self.authorizer.authorize.call_args.args[0]
         request_options = self.print_service.requests[0].options
-        self.assertEqual("Letter", authorization_payload["paper_size"])
-        self.assertEqual("Letter", request_options.paper_size)
-        self.assertEqual("actual", request_options.scale_mode)
-        self.assertEqual(1.25, request_options.max_upscale)
+        self.assertEqual("A4", authorization_payload["paper_size"])
+        self.assertEqual("portrait", authorization_payload["orientation"])
+        self.assertEqual(120, authorization_payload["scale_percent"])
+        self.assertEqual("A4", request_options.paper_size)
+        self.assertEqual("portrait", request_options.orientation)
+        self.assertEqual(120, request_options.scale_percent)
 
     def test_terminal_refresh_happens_before_next_portal_authorization(self):
         authorizations = [
