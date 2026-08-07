@@ -47,9 +47,10 @@ export function createAppController({ mountNode }) {
   const router = createRouter({ state, renderView: async () => render() });
 
   const sse = new UserSseClient({
-    onMessage: ({ type, data }) => {
+    onMessage: (message) => {
+      const { type, data } = message || {};
       state.sseStatus.lastMessageAt = Date.now();
-      handleSseMessage(type, data || {});
+      handleSseMessage(type, data || {}, message);
     },
     onStatusChange: ({ connecting, connected, retryCount = 0 }) => {
       state.sseStatus.connecting = Boolean(connecting);
@@ -74,7 +75,7 @@ export function createAppController({ mountNode }) {
     return !currentSessionId() || !incomingSessionId || incomingSessionId === currentSessionId();
   }
 
-  function handleSseMessage(type, data) {
+  function handleSseMessage(type, data, message = {}) {
     if (!acceptSessionEvent(data)) return;
 
     if (type === "preview_file") {

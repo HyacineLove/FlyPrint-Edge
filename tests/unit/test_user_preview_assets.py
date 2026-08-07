@@ -403,6 +403,14 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("snapshot.error_code", controller)
         self.assertIn("snapshot.error_message", controller)
 
+    def test_terminal_mask_ack_preserves_command_id_from_sse_envelope(self):
+        controller = read_source(BASE_DIR / "modules/app/app-controller.js")
+
+        self.assertIn("onMessage: (message) =>", controller)
+        self.assertIn("handleSseMessage(type, data || {}, message)", controller)
+        self.assertIn("function handleSseMessage(type, data, message = {})", controller)
+        self.assertIn("command_id: message.command_id", controller)
+
     def test_print_error_mapping_sanitizes_driver_and_job_tracking_errors(self):
         runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
 
