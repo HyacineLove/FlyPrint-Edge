@@ -602,6 +602,24 @@ class CloudWebSocketClient:
         }
         return self.send_message_sync(message)
 
+    def request_entry_ticket(self, node_id: str, printer_id: str, qr_generation: int, request_id: str = "") -> bool:
+        """Request a QR entry T1; this is separate from file upload credentials."""
+        from datetime import datetime, timezone
+        return self.send_message_sync({
+            "type": "request_entry_ticket", "node_id": node_id,
+            "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "data": {"printer_id": printer_id, "qr_generation": qr_generation, "request_id": request_id},
+        })
+
+    def report_terminal_masked(self, node_id: str, command_id: str, session: Optional[Dict[str, Any]]) -> bool:
+        from datetime import datetime, timezone
+        session = session or {}
+        return self.send_message_sync({
+            "type": "terminal_masked", "node_id": node_id,
+            "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "data": {"command_id": command_id, "terminal_session_id": session.get("session_id") or "", "qr_generation": session.get("qr_generation") or 0},
+        })
+
     def report_terminal_session_state(self, node_id: str, session: Optional[Dict[str, Any]]) -> bool:
         """Report the current kiosk session; passing None explicitly clears it."""
         from datetime import datetime, timezone
@@ -614,6 +632,7 @@ class CloudWebSocketClient:
                 "terminal_session_id": session.get("session_id") or "",
                 "terminal_ticket_hash": session.get("terminal_ticket_hash") or "",
                 "entry_type": session.get("entry_type") or "",
+                "qr_generation": session.get("qr_generation") or 0,
             },
         }
         return self.send_message_sync(message)
@@ -687,6 +706,8 @@ class PrintJobHandler:
         self.upload_token_callback = None  # 上传凭证成功回调
         self.upload_token_error_callback = None  # 上传凭证错误回调
         self.upload_token_request_id = None
+        self.entry_ticket_callback = None
+        self.entry_ticket_request_id = None
         self.last_upload_token = None  # 缓存最近的上传凭证
         self.job_terminal_contexts: Dict[str, Dict[str, Any]] = {}
     
@@ -779,6 +800,15 @@ class PrintJobHandler:
         except Exception as e:
             logger.error(f"处理上传凭证异常: {e}")
     
+    def handle_entry_ticket(self, message: Dict[str, Any]):
+        data = message.get("data", {})
+        if (
+            data.get("request_id") == self.entry_ticket_request_id
+            and data.get("ticket") and data.get("entry_url")
+            and callable(self.entry_ticket_callback)
+        ):
+            self.entry_ticket_callback(data["ticket"], data.get("expires_at"), data["entry_url"])
+
     def handle_preview_file(self, message: Dict[str, Any]):
         """处理文件预览请求
         

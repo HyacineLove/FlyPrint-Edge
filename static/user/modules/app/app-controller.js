@@ -99,6 +99,22 @@ export function createAppController({ mountNode }) {
       return;
     }
 
+    if (type === "terminal_mask") {
+      if (state.currentView === "login") {
+        currentViewApi?.setTerminalOccupied?.(true, {
+          expiresAt: data?.expires_at || null,
+          message: "终端正在使用中，请稍候或刷新二维码",
+        });
+        // setTerminalOccupied mutates the rendered login view synchronously;
+        // acknowledge only after that visual boundary has been applied.
+        void fetch("/api/terminal/masked", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command_id: message.command_id, terminal_session_id: data?.terminal_session_id, qr_generation: data?.qr_generation }),
+        });
+      }
+      return;
+    }
+
     if (type === "terminal_occupied") {
       if (state.currentView === "login") {
         currentViewApi?.setTerminalOccupied?.(true, {

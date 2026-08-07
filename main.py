@@ -187,6 +187,7 @@ async def startup_event():
     if cloud_service:
         cloud_service.add_message_listener("preview_file", handle_cloud_message)
         cloud_service.add_message_listener("terminal_occupied", handle_cloud_message)
+        cloud_service.add_message_listener("terminal_mask", handle_cloud_message)
         cloud_service.add_message_listener("portal_session_ready", handle_cloud_message)
         cloud_service.add_message_listener("error", handle_cloud_message)
         cloud_service.add_message_listener("cloud_error", handle_cloud_message)
@@ -290,6 +291,15 @@ def _enrich_message_with_session(message: Dict[str, Any]) -> Optional[Dict[str, 
         enriched = dict(message)
         enriched["data"] = accepted
         return enriched
+
+    if message_type == "terminal_mask":
+        active = interactive_session_manager.get_active_session() or {}
+        if (
+            active.get("session_id") != payload.get("terminal_session_id")
+            or active.get("qr_generation") != payload.get("qr_generation")
+        ):
+            return None
+        return {"type": "terminal_mask", "command_id": message.get("command_id"), "data": payload}
 
     if message_type == "terminal_occupied":
         # Command payload may be nested under data; normalize flat fields.
@@ -887,6 +897,17 @@ async def get_qr_code():
             return JSONResponse(status_code=503, content={"success": False, "message": "云端服务未连接"})
 
         # 创建一个 Future 用于等待上传凭证响应
+        previous_session = interactive_session_manager.get_active_session()
+        if previous_session:
+            previous_session_id = previous_session["session_id"]
+            prp_file_selection_manager.clear_session(previous_session_id)
+            file_mgr = get_file_manager()
+            if file_mgr:
+                file_mgr.release_preview_session(previous_session_id, reason="new_session")
+        portal_session_manager.clear()
+        session = interactive_session_manager.start_session()
+        _report_terminal_session_state(session)
+
         upload_token_future = asyncio.Future()
         upload_token_request_id = str(uuid.uuid4())
         upload_token_loop = asyncio.get_running_loop()
@@ -914,24 +935,23 @@ async def get_qr_code():
 
         # 设置回调
         if cloud_service.print_job_handler:
-            cloud_service.print_job_handler.upload_token_callback = upload_token_callback
-            cloud_service.print_job_handler.upload_token_error_callback = upload_token_error_callback
-            cloud_service.print_job_handler.upload_token_request_id = upload_token_request_id
+            cloud_service.print_job_handler.entry_ticket_callback = upload_token_callback
+            cloud_service.print_job_handler.entry_ticket_request_id = upload_token_request_id
 
         # 请求上传凭证
-        success = cloud_service.websocket_client.request_upload_token(
+        success = cloud_service.websocket_client.request_entry_ticket(
             node_id,
             cloud_printer_id,
+			session["qr_generation"],
             upload_token_request_id,
         )
         if not success:
             if (
                 cloud_service.print_job_handler
-                and cloud_service.print_job_handler.upload_token_request_id == upload_token_request_id
+                and cloud_service.print_job_handler.entry_ticket_request_id == upload_token_request_id
             ):
-                cloud_service.print_job_handler.upload_token_callback = None
-                cloud_service.print_job_handler.upload_token_error_callback = None
-                cloud_service.print_job_handler.upload_token_request_id = None
+                cloud_service.print_job_handler.entry_ticket_callback = None
+                cloud_service.print_job_handler.entry_ticket_request_id = None
             return JSONResponse(status_code=500, content={"success": False, "message": "请求上传凭证失败"})
 
         # 等待上传凭证响应（最多等待 10 秒）
@@ -948,11 +968,10 @@ async def get_qr_code():
             # 清除回调
             if (
                 cloud_service.print_job_handler
-                and cloud_service.print_job_handler.upload_token_request_id == upload_token_request_id
+                and cloud_service.print_job_handler.entry_ticket_request_id == upload_token_request_id
             ):
-                cloud_service.print_job_handler.upload_token_callback = None
-                cloud_service.print_job_handler.upload_token_error_callback = None
-                cloud_service.print_job_handler.upload_token_request_id = None
+                cloud_service.print_job_handler.entry_ticket_callback = None
+                cloud_service.print_job_handler.entry_ticket_request_id = None
     
     # 检查是否是错误响应
     if not token_data.get("success"):
@@ -1026,15 +1045,8 @@ async def get_qr_code():
             path = "/" + path
         upload_url = f"{upload_base}{path}"
 
-    previous_session = interactive_session_manager.get_active_session()
-    if previous_session:
-        previous_session_id = previous_session["session_id"]
-        prp_file_selection_manager.clear_session(previous_session_id)
-        file_mgr = get_file_manager()
-        if file_mgr:
-            file_mgr.release_preview_session(previous_session_id, reason="new_session")
-    portal_session_manager.clear()
-    session = interactive_session_manager.start_session(upload_token=token_data["token"])
+    if not interactive_session_manager.bind_entry_ticket(session["session_id"], token_data["token"]):
+        return JSONResponse(status_code=409, content={"success": False, "message": "terminal session changed"})
     _report_terminal_session_state(session)
     qr_img_url = build_qr_data_url(upload_url)
 
@@ -1046,13 +1058,26 @@ async def get_qr_code():
         "qr_url": qr_img_url, 
         "text_url": upload_url,
         "node_id": node_id,
-        "token": token_data['token'],
+        "entry_ticket": "issued",
         "expires_at": token_data['expires_at'],
         "default_printer_id": default_printer_id,
         "default_printer_capabilities": default_printer_capabilities,
         "settings": _build_qr_runtime_settings(),
         "session_id": session["session_id"],
     }
+
+@app.post("/api/terminal/masked")
+async def terminal_masked(payload: Dict[str, Any]):
+    """Called by the renderer only after it has applied the QR mask."""
+    command_id = str(payload.get("command_id") or "").strip()
+    active = interactive_session_manager.get_active_session() or {}
+    if not command_id or payload.get("terminal_session_id") != active.get("session_id") or payload.get("qr_generation") != active.get("qr_generation"):
+        return JSONResponse(status_code=409, content={"success": False})
+    if not cloud_service or not cloud_service.websocket_client:
+        return JSONResponse(status_code=503, content={"success": False})
+    if not cloud_service.websocket_client.report_terminal_masked(node_id, command_id, active):
+        return JSONResponse(status_code=503, content={"success": False})
+    return {"success": True}
 
 @app.get("/api/events")
 async def events(request: Request):

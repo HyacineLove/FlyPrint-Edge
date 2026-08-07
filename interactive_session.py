@@ -10,6 +10,7 @@ class InteractiveSessionManager:
     def __init__(self):
         self._lock = threading.RLock()
         self._active_session: Optional[Dict[str, Any]] = None
+        self._qr_generation = 0
 
     def start_session(
         self,
@@ -18,12 +19,14 @@ class InteractiveSessionManager:
         entry_type: str = "official",
     ) -> Dict[str, Any]:
         with self._lock:
+            self._qr_generation += 1
             session_id = uuid.uuid4().hex
             self._active_session = {
                 "session_id": session_id,
                 "upload_token": upload_token,
                 "terminal_ticket_hash": hashlib.sha256(terminal_ticket.encode("utf-8")).hexdigest() if terminal_ticket else None,
                 "entry_type": entry_type,
+                "qr_generation": self._qr_generation,
                 "site_portal_code": None,
                 "cloud_user_id": None,
                 "external_user_id": None,
@@ -50,6 +53,15 @@ class InteractiveSessionManager:
                 "updated_at": time.time(),
             }
             return deepcopy(self._active_session)
+
+    def bind_entry_ticket(self, session_id: str, ticket: str) -> bool:
+        """Bind Cloud-issued T1 to the current QR generation."""
+        with self._lock:
+            if not self._active_session or self._active_session["session_id"] != session_id or not ticket:
+                return False
+            self._active_session["terminal_ticket_hash"] = hashlib.sha256(ticket.encode("utf-8")).hexdigest()
+            self._active_session["updated_at"] = time.time()
+            return True
 
     def get_active_session(self) -> Optional[Dict[str, Any]]:
         with self._lock:

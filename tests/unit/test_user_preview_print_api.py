@@ -64,6 +64,7 @@ class DummyWebSocketClient:
     def __init__(self):
         self.sent_messages = []
         self.upload_token_requested = False
+        self.entry_ticket_requested = False
         self.requested_printer_id = None
 
     async def send_message(self, message):
@@ -74,6 +75,14 @@ class DummyWebSocketClient:
         self.upload_token_requested = True
         self.requested_printer_id = printer_id
         return False
+
+    def request_entry_ticket(self, node_id, printer_id, qr_generation, request_id=""):
+        self.entry_ticket_requested = True
+        self.requested_printer_id = printer_id
+        return False
+
+    def report_terminal_session_state(self, node_id, session):
+        return True
 
 
 class DummyStatusReporter:
@@ -409,7 +418,7 @@ class UserPreviewPrintApiTests(unittest.TestCase):
         self.assertFalse(response["success"])
         self.assertFalse(self.cloud_service.websocket_client.upload_token_requested)
 
-    def test_qr_code_requests_token_with_cloud_printer_id(self):
+    def test_qr_code_requests_entry_ticket_with_cloud_printer_id(self):
         ready = {
             "printer-state": [3],
             "printer-state-reasons": ["none"],

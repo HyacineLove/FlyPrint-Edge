@@ -507,6 +507,7 @@ class CloudService:
             # 添加上传凭证响应处理器
             if self.print_job_handler:
                 self.websocket_client.add_message_handler("upload_token", self.print_job_handler.handle_upload_token)
+                self.websocket_client.add_message_handler("entry_ticket", self.print_job_handler.handle_entry_ticket)
 
             # 终端占用（进门票签发）→ 由 main 转发 SSE 遮挡二维码
             # handler 在 pending_listeners / main 注册
