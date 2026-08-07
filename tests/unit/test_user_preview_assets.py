@@ -428,16 +428,28 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertNotIn("default_scale_mode", preview_view)
         self.assertNotIn("default_max_upscale", preview_view)
 
-    def test_scale_change_updates_cached_preview_layer_without_refreshing_preview(self):
+    def test_scale_change_requests_a_preview_render_with_print_layout_scale(self):
         preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
         self.assertRegex(
             preview_view,
             r"const changeScale = \(delta\) => \{[\s\S]*?saveSessionState\(\);[\s\S]*?renderOptionsUI\(\);[\s\S]*?\n  \};",
         )
         change_scale = preview_view.split("const changeScale = (delta) =>", 1)[1].split("const pickColor", 1)[0]
-        self.assertNotIn("queuePreviewRefresh", change_scale)
-        self.assertIn("setPreviewScale(\"115_58\", scalePercent)", preview_view)
-        self.assertIn("scale_percent: forPreview ? 100", preview_view)
+        self.assertIn("queuePreviewRefresh", change_scale)
+        self.assertNotIn("setPreviewScale(\"115_58\", scalePercent)", preview_view)
+        self.assertNotIn("scale_percent: forPreview ? 100", preview_view)
+        self.assertIn("scale_percent: normalizeScalePercent(session.options.scale_percent)", preview_view)
+
+    def test_preview_stage_switches_geometry_with_document_orientation(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        dom = read_source(BASE_DIR / "modules/shared/dom.js")
+        preview_css = read_source(BASE_DIR / "css/preview.css")
+
+        self.assertIn("setPreviewOrientation(orientation)", preview_view)
+        self.assertIn("export function setPreviewOrientation", dom)
+        self.assertIn(".Pixso-frame-55_77.is-landscape", preview_css)
+        self.assertIn(".Pixso-frame-55_77.is-portrait", preview_css)
+        self.assertIn("#preview-document-layer", preview_css)
 
     def test_printing_indicator_is_full_width_and_uses_device_page_progress(self):
         view = read_source(BASE_DIR / "modules/views/printing-view.js")

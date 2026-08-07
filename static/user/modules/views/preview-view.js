@@ -1,7 +1,13 @@
 import { api, postJson } from "../shared/api.js";
 import { applyPrinterCapabilityState, setOptionDisabledState } from "../shared/capabilities.js";
 import { createMainCountdown } from "../shared/countdown.js";
-import { on, q, setPreviewBg, setPreviewScale, setText } from "../shared/dom.js";
+import {
+  on,
+  q,
+  setPreviewBg,
+  setPreviewOrientation,
+  setText,
+} from "../shared/dom.js";
 import {
   clearPendingPrintRequest,
   createDefaultCapabilityState,
@@ -248,6 +254,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
 
     const orientation = normalizeOrientation(session.options?.orientation);
     session.options.orientation = orientation;
+    setPreviewOrientation(orientation);
     setChoiceVisual("preview-orientation-portrait", { active: orientation === "portrait" });
     setChoiceVisual("preview-orientation-landscape", { active: orientation === "landscape" });
 
@@ -256,7 +263,6 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     setText(["preview-scale-value"], `${scalePercent}%`);
     setChoiceVisual("preview-scale-decrease", { disabled: scalePercent <= minScalePercent });
     setChoiceVisual("preview-scale-increase", { disabled: scalePercent >= maxScalePercent });
-    setPreviewScale("115_58", scalePercent);
 
     const color = session.options?.color_mode || "color";
     const colorSupported = Boolean(session.capabilityState?.colorSupported);
@@ -273,7 +279,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
       color_mode: session.options.color_mode || "color",
       orientation: normalizeOrientation(session.options.orientation),
       paper_size: defaultPaperSize,
-      scale_percent: forPreview ? 100 : normalizeScalePercent(session.options.scale_percent),
+      scale_percent: normalizeScalePercent(session.options.scale_percent),
     };
   }
 
@@ -432,6 +438,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     );
     saveSessionState();
     renderOptionsUI();
+    queuePreviewRefresh();
   };
 
   const pickColor = (value) => {

@@ -38,9 +38,11 @@ export function setPreviewBg(id, url) {
   el.style.backgroundColor = "#ffffff";
 }
 
-export function setPreviewScale(id, percent) {
-  const el = q("preview-document-layer") || q(id);
-  if (!el) return;
-  const scale = Math.max(0.5, Math.min(1.5, Number(percent || 100) / 100));
-  el.style.transform = `scale(${scale})`;
+export function setPreviewOrientation(orientation) {
+  const frame = q("55_77");
+  if (!frame) return;
+  const isLandscape = orientation === "landscape";
+  frame.classList.toggle("is-landscape", isLandscape);
+  frame.classList.toggle("is-portrait", !isLandscape);
+  frame.dataset.previewOrientation = isLandscape ? "landscape" : "portrait";
 }

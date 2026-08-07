@@ -974,5 +974,79 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   animation: ui-countdown-spin 1.2s linear infinite;
 }
 
-  
+/* The preview surface follows the selected paper orientation.  The old
+   fixed portrait frame made landscape pages appear artificially small. */
+.Pixso-frame-55_77.is-portrait .Pixso-rectangle-115_56 {
+  width: 441px;
+  height: 646px;
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-group-115_57,
+.Pixso-frame-55_77.is-portrait .Pixso-rectangle-115_58,
+.Pixso-frame-55_77.is-portrait .Pixso-rectangle-115_59 {
+  width: 397px;
+  height: 614px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-rectangle-115_56 {
+  width: 646px;
+  height: 441px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-group-115_57,
+.Pixso-frame-55_77.is-landscape .Pixso-rectangle-115_58,
+.Pixso-frame-55_77.is-landscape .Pixso-rectangle-115_59 {
+  width: 614px;
+  height: 397px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-button-115_61 {
+  left: calc(50% - 399px);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-button-115_62 {
+  right: calc(50% - 399px);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_481 {
+  top: 958px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_480 {
+  top: 1012px;
+}
+
+.Pixso-frame-55_77.is-landscape .preview-options-panel {
+  top: 1160px !important;
+}
+
+.Pixso-frame-55_77.is-landscape .preview-options-panel,
+.Pixso-frame-55_77.is-portrait .preview-options-panel {
+  grid-template-rows: repeat(3, 126px);
+  gap: 16px;
+  height: 410px !important;
+}
+
+.Pixso-frame-55_77.is-landscape .preview-option-card,
+.Pixso-frame-55_77.is-portrait .preview-option-card {
+  border: 1px solid rgba(228, 230, 241, 0.9);
+  box-shadow: 0 8px 20px rgba(88, 95, 153, 0.06);
+}
+
+.Pixso-frame-55_77.is-landscape .preview-option-label,
+.Pixso-frame-55_77.is-portrait .preview-option-label {
+  font-size: 30px !important;
+}
+
+.Pixso-frame-55_77.is-landscape .preview-choice-button,
+.Pixso-frame-55_77.is-portrait .preview-choice-button {
+  height: 82px;
+  border-radius: 14px;
+}
+
+.Pixso-frame-55_77.is-landscape .preview-options-panel,
+.Pixso-frame-55_77.is-portrait .preview-options-panel {
+  width: 867px !important;
+}
+
 
