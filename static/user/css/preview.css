@@ -1049,4 +1049,25 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   width: 867px !important;
 }
 
+/* 缩放值必须保持为一个完整的触摸控件，不能被全局 word-break 拆成两行。 */
+.preview-option-card--scale .preview-copies-control {
+  flex-shrink: 0;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.preview-option-card--scale .preview-step-button {
+  min-width: 74px;
+  width: 74px;
+  font-size: 42px;
+}
+
+.preview-option-card--scale .preview-copies-value {
+  flex: 0 0 74px;
+  width: 74px;
+  white-space: nowrap;
+  font-size: 32px;
+  letter-spacing: -0.02em;
+}
+
 

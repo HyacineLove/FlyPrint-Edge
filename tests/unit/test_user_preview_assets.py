@@ -451,6 +451,14 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn(".Pixso-frame-55_77.is-portrait", preview_css)
         self.assertIn("#preview-document-layer", preview_css)
 
+    def test_scale_value_stays_on_one_line(self):
+        preview_css = read_source(BASE_DIR / "css/preview.css")
+
+        self.assertIn(".preview-option-card--scale .preview-copies-value", preview_css)
+        scale_rule = preview_css.split(".preview-option-card--scale .preview-copies-value", 1)[1]
+        self.assertIn("white-space: nowrap", scale_rule)
+        self.assertIn("flex: 0 0 74px", scale_rule)
+
     def test_printing_indicator_is_full_width_and_uses_device_page_progress(self):
         view = read_source(BASE_DIR / "modules/views/printing-view.js")
         runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
