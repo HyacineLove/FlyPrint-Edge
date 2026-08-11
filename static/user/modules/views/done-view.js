@@ -1,6 +1,7 @@
 import { on, setText } from "../shared/dom.js";
 import { api, getJson } from "../shared/api.js";
 import { createMainCountdown } from "../shared/countdown.js";
+import { confirmLogout } from "../shared/logout.js";
 
 export function renderDoneView() {
   return `
@@ -17,13 +18,13 @@ export function renderDoneView() {
       <p id="77_18" class="Pixso-paragraph-77_18"></p>
       <p id="77_21" class="Pixso-paragraph-77_21"></p>
       <button id="donePrinterRefresh" class="done-printer-refresh" type="button" hidden>刷新检测</button>
-      <button id="115_43" class="Pixso-group-115_43" type="button" hidden>
+      <button id="115_43" class="Pixso-group-115_43" type="button">
         <div class="done-secondary-action-surface"></div>
-        <p class="Pixso-paragraph-115_45">继续选择文件</p>
+        <p class="Pixso-paragraph-115_45">退出登录</p>
       </button>
-      <button id="115_40" class="Pixso-group-115_40 ui-action-button ui-action-button--primary" type="button">
+      <button id="115_40" class="Pixso-group-115_40 ui-action-button ui-action-button--primary" type="button" hidden>
         <div id="115_41" class="Pixso-rectangle-115_41 fill-primary-gradient"></div>
-        <p id="115_42" class="Pixso-paragraph-115_42"></p>
+        <p id="115_42" class="Pixso-paragraph-115_42">继续打印</p>
       </button>
       <p id="115_26" class="Pixso-paragraph-115_26"></p>
     </div>
@@ -39,11 +40,11 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     appState.session?.session_id &&
     appState.session?.file?.source_origin === "prp",
   );
-  const continueButton = document.getElementById("115_43");
-  continueButton?.classList.add("ui-action-button", "ui-action-button--secondary");
+  const logoutButton = document.getElementById("115_43");
+  logoutButton?.classList.add("ui-action-button", "ui-action-button--secondary");
+  if (logoutButton) logoutButton.classList.toggle("single-action", !canContinueToFiles);
+  const continueButton = document.getElementById("115_40");
   if (continueButton) continueButton.hidden = !canContinueToFiles;
-  const returnButton = document.getElementById("115_40");
-  if (returnButton) returnButton.classList.toggle("single-action", !canContinueToFiles);
   const refreshButton = document.getElementById("donePrinterRefresh");
   refreshButton?.classList.add("ui-action-button", "ui-action-button--secondary");
   const countdownElement = document.getElementById("115_18");
@@ -84,8 +85,8 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     return result.type === "error" && unconfirmedCodes.has(result.error_code);
   }
 
-  function setReturnEnabled(enabled) {
-    const button = document.getElementById("115_40");
+  function setLogoutEnabled(enabled) {
+    const button = logoutButton;
     if (!button) return;
     button.style.pointerEvents = enabled ? "auto" : "none";
     button.style.opacity = enabled ? "1" : "0.45";
@@ -107,13 +108,14 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
   function beginLoading() {
     doneLoading = true;
     mainCountdown.stop("loading");
-    setReturnEnabled(false);
+    setLogoutEnabled(false);
     setRefreshEnabled(false);
     if (continueButton) continueButton.disabled = true;
   }
 
-  function leave() {
+  function leave({ requireConfirmation = false } = {}) {
     if (continueInFlight || doneLoading) return;
+    if (requireConfirmation && !confirmLogout()) return;
     beginLoading();
     mainCountdown.stop();
     void restartCycle();
@@ -126,9 +128,8 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     try {
       const availability = await getJson(api.printerAvailability);
       if (!availability?.faulted) {
-        setText(["77_21"], "打印机已恢复，可返回首页继续使用");
-        setText(["115_42"], "返回首页");
-        setReturnEnabled(true);
+        setText(["77_21"], "打印机已恢复，可退出登录后继续使用");
+        setLogoutEnabled(true);
         setRefreshEnabled(false);
         doneLoading = false;
         startCountdown(10, leave);
@@ -141,7 +142,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
       availabilityCheckInFlight = false;
       if (doneLoading) {
         doneLoading = false;
-        setReturnEnabled(false);
+        setLogoutEnabled(false);
         setRefreshEnabled(true);
         startCountdown(10, checkPrinterAvailability);
       }
@@ -158,7 +159,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     } catch (error) {
       continueInFlight = false;
       doneLoading = false;
-      setReturnEnabled(true);
+      setLogoutEnabled(true);
       if (continueButton) continueButton.disabled = false;
       setText(["77_21"], error?.message || "暂时无法返回文件列表，请稍后重试");
       startCountdown(10, continueSelection);
@@ -169,13 +170,12 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     const unconfirmed = isUnconfirmedResult();
     setText(["77_18"], unconfirmed ? "结果待确认" : "设备维护中");
     setText(["77_21"], result.message || (unconfirmed ? "请勿重复提交，请联系工作人员。" : "打印机故障，请联系管理员处理"));
-    setText(["115_42"], "返回首页");
     if (refreshButton) refreshButton.hidden = false;
-    setReturnEnabled(false);
+    setLogoutEnabled(false);
     setRefreshEnabled(true);
     startCountdown(10, checkPrinterAvailability);
     on("donePrinterRefresh", () => void checkPrinterAvailability());
-    on("115_40", () => leave());
+    on("115_43", () => leave({ requireConfirmation: true }));
     return {
       destroy() {
         mainCountdown.destroy();
@@ -187,16 +187,16 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
   if (result.type === "error") {
     setText(["77_18"], "打印失败");
     setText(["77_21"], result.message || "云端服务异常，请稍后重试");
-    setReturnEnabled(true);
+    setLogoutEnabled(true);
   } else {
     setText(["77_18"], "打印完成");
     setText(["77_21"], "请尽快取走您的文件");
-    setReturnEnabled(true);
+    setLogoutEnabled(true);
     startCountdown(10, leave);
   }
 
-  on("115_40", () => leave());
-  on("115_43", () => void continueSelection());
+  on("115_43", () => leave({ requireConfirmation: true }));
+  on("115_40", () => void continueSelection());
 
   return {
     destroy() {

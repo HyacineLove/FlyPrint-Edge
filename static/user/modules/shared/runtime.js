@@ -101,7 +101,7 @@ export function renderCommonText(page) {
   setText(["3_30"], "刷新二维码");
   setText(["97_456"], "返回");
   setText(["97_462"], "立刻打印");
-  setText(["115_42"], page === "done" ? "返回首页" : "继续打印");
+  setText(["115_42"], "继续打印");
   setText(["97_473"], "打印设置");
   setText(["55_113"], "打印份数");
   setText(["55_124"], "打印模式");

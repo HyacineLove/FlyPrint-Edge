@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import main
@@ -58,6 +58,30 @@ class AdminConfigApiTests(unittest.TestCase):
             response = asyncio.run(main.unbind_cloud_node())
         self.assertTrue(response["success"])
         self.assertEqual(cloud.calls, [("unbind",)])
+
+    def test_unbind_clears_active_interactive_resources(self):
+        cloud = DummyCloud()
+        interactive = MagicMock()
+        interactive.get_active_session.return_value = {"session_id": "session-1"}
+        selections = MagicMock()
+        portal = MagicMock()
+        file_manager = MagicMock()
+        with (
+            patch.object(main, "cloud_service", cloud),
+            patch.object(main, "interactive_session_manager", interactive),
+            patch.object(main, "prp_file_selection_manager", selections),
+            patch.object(main, "portal_session_manager", portal),
+            patch.object(main, "get_file_manager", return_value=file_manager),
+            patch.object(main, "_report_terminal_session_state"),
+            patch.object(main, "broadcast_sse_event", new=AsyncMock()),
+        ):
+            response = asyncio.run(main.unbind_cloud_node())
+
+        self.assertTrue(response["success"])
+        interactive.clear_session.assert_called_once_with("session-1")
+        selections.clear_session.assert_called_once_with("session-1")
+        portal.clear.assert_called_once_with("session-1")
+        file_manager.release_preview_session.assert_called_once_with("session-1", reason="cloud_unbind")
 
 
 if __name__ == "__main__":

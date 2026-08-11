@@ -24,6 +24,17 @@ class ConfigServiceTests(unittest.TestCase):
         self.assertNotIn("client_secret", merged["cloud"])
         self.assertEqual(merged["cloud"]["base_url"], "http://new.example.com")
 
+    def test_merge_ignores_unknown_settings_fields(self):
+        merged = self.service.merge_update(self.raw, {
+            "settings": {
+                "max_pages": -1,
+                "max_document_pages": 8,
+            },
+        })
+
+        self.assertNotIn("max_pages", merged["settings"])
+        self.assertEqual(8, merged["settings"]["max_document_pages"])
+
     def test_cloud_health_preflight_uses_base_url_only(self):
         with patch("config_service.requests.get") as get:
             get.return_value.status_code = 200

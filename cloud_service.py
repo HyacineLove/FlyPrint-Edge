@@ -778,7 +778,7 @@ class CloudService:
             return {"success": False, "message": "请输入激活码"}
         try:
             verify_ssl = bool(self._runtime_cloud_config().get("verify_ssl", True))
-            health = requests.get(f"{base_url}/api/v1/health", verify=verify_ssl, timeout=10)
+            health = requests.get(f"{base_url}/health", verify=verify_ssl, timeout=10)
             if health.status_code >= 400:
                 return {"success": False, "message": f"Cloud 健康检查失败: {health.status_code}"}
             response = requests.post(

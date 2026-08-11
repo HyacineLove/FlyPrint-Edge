@@ -350,7 +350,9 @@ class CloudWebSocketClient:
                 headers = {
                     "Authorization": f"Bearer {token}",
                     "Connection": "Upgrade",
-                    "Upgrade": "websocket"
+                    "Upgrade": "websocket",
+                    # 与 Cloud 的文件令牌请求头协议一同升级；旧版本会被 Cloud 拒绝握手。
+                    "X-Fly-Print-Protocol-Version": "2",
                 }
                 
                 websocket_ssl = (
@@ -771,8 +773,8 @@ class PrintJobHandler:
             "data": {
                 "token": "Base64编码凭证",
                 "expires_at": "过期时间",
-                "upload_url": "/api/v1/files?token=xxx",  # API上传端点（POST请求）
-                "web_url": "/upload?token=xxx&node_id=xxx&printer_id=xxx"  # Web上传页面（GET请求，用于生成二维码）
+                "upload_url": "/api/v1/files",  # API上传端点（POST请求，token走请求头）
+                "web_url": "/upload#token=xxx&node_id=xxx&printer_id=xxx"  # Web上传页面（fragment 不会发送到服务端）
             }
         }
         """
@@ -1095,7 +1097,7 @@ class PrintJobHandler:
         try:
             import requests
             import os
-            from urllib.parse import urlparse, urlencode, urlunparse, parse_qs, urlsplit
+            from urllib.parse import urlsplit
             from portable_temp import get_portable_temp_dir
             
             # 如果是相对路径，拼接完整URL
@@ -1124,15 +1126,7 @@ class PrintJobHandler:
             # 优先使用file_access_token（API文档推荐方式）
             elif file_access_token:
                 auth_mode = "file_access_token"
-                # 将token作为查询参数添加到URL
-                parsed = urlparse(file_url)
-                query_params = parse_qs(parsed.query)
-                query_params['token'] = [file_access_token]
-                new_query = urlencode(query_params, doseq=True)
-                download_url = urlunparse((
-                    parsed.scheme, parsed.netloc, parsed.path,
-                    parsed.params, new_query, parsed.fragment
-                ))
+                headers["X-Fly-Print-File-Token"] = file_access_token
                 logger.debug("使用file_access_token下载文件")
             else:
                 # 回退到Bearer Token认证

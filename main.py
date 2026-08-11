@@ -49,6 +49,7 @@ from print_runtime import build_document_pipeline, build_print_service, stop_doc
 from portal_print_service import PortalPrintService, shutdown_portal_executor
 from printing.documents import DocumentIdentity
 from printing.domain import ErrorCode, PrintError, PrintOptions
+from printing.service import DEVICE_JOBS
 
 logger = logging.getLogger("EdgeServer")
 
@@ -224,6 +225,21 @@ async def broadcast_sse_event(event_type: str, data: Dict[str, Any]):
             _enqueue_sse_latest(q, message)
     except Exception as e:
         logger.error(f" 广播SSE事件失败: {e}")
+
+
+def _clear_interactive_resources_for_cloud_unbind() -> None:
+    """Clear the local user session after an administrator unbinds the Edge."""
+    active = interactive_session_manager.get_active_session() or {}
+    session_id = active.get("session_id")
+    if session_id:
+        interactive_session_manager.clear_session(session_id)
+        prp_file_selection_manager.clear_session(session_id)
+        portal_session_manager.clear(session_id)
+        file_mgr = get_file_manager()
+        if file_mgr:
+            file_mgr.release_preview_session(session_id, reason="cloud_unbind")
+    else:
+        portal_session_manager.clear()
 
 
 def _normalize_ops_contacts_payload(raw) -> list:
@@ -651,27 +667,13 @@ def _download_preview_file(file_url: str, file_name: Optional[str], file_id: Opt
         auth_mode = "bearer"
         file_access_token = file_mgr.get_file_access_token(file_id) if file_mgr and file_id else None
         if file_access_token:
-            from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-
             full_url = validate_download_url(
                 _build_file_url(file_url),
                 cloud_service.api_client.base_url,
                 allow_signed_url=True,
             )
-            parsed = urlparse(full_url)
-            query_params = parse_qs(parsed.query)
-            query_params["token"] = [file_access_token]
-            new_query = urlencode(query_params, doseq=True)
-            download_url = urlunparse(
-                (
-                    parsed.scheme,
-                    parsed.netloc,
-                    parsed.path,
-                    parsed.params,
-                    new_query,
-                    parsed.fragment,
-                )
-            )
+            download_url = full_url
+            headers["X-Fly-Print-File-Token"] = file_access_token
             headers.pop("Authorization", None)
             auth_mode = "file_access_token"
         else:
@@ -1148,7 +1150,7 @@ async def list_prp_files(session_id: str, page: int = 1, page_size: int = 20):
         )
         return result
     except PRPClientError as exc:
-        status_code = 400 if exc.code == "invalid_pagination" else 502
+        status_code = 400 if exc.code == "invalid_pagination" else 504 if exc.code == "prp_list_timeout" else 502
         return JSONResponse(
             status_code=status_code,
             content={"success": False, "error_code": exc.code},
@@ -1620,6 +1622,7 @@ async def unbind_cloud_node():
     if not result.get("success"):
         return JSONResponse(status_code=400, content=result)
     node_id = None
+    _clear_interactive_resources_for_cloud_unbind()
     await broadcast_sse_event("node_status_changed", {"status": "unbound", "node_id": None})
     return result
 
@@ -1867,6 +1870,15 @@ async def start_printer_test(printer_id: str):
     printer = _get_printer_by_id(printer_id)
     if not printer:
         return {"success": False, "message": "未找到该打印机。"}
+    printer_uuid = str(printer.get("printer_uuid") or "")
+    if printer_uuid and DEVICE_JOBS.is_uncertain(printer_uuid):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "打印结果未知锁定中，请先确认无遗留任务并解除结果未知锁定。",
+            },
+        )
     active_task_id = active_printer_tests.get(printer_id)
     if active_task_id and printer_test_tasks.get(active_task_id, {}).get("status") == "running":
         return JSONResponse(

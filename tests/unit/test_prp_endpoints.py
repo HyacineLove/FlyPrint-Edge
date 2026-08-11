@@ -51,6 +51,11 @@ class _FakePRPClient:
         }
 
 
+class _TimedOutPRPClient:
+    def list_files(self, _access, _page, _page_size):
+        raise PRPClientError("prp_list_timeout")
+
+
 class PRPEndpointTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -77,6 +82,15 @@ class PRPEndpointTests(unittest.TestCase):
              patch.object(main, "portal_session_manager", self.portal):
             response = asyncio.run(main.list_prp_files("wrong-session"))
         self.assertEqual(401, response.status_code)
+
+    def test_list_timeout_returns_a_gateway_timeout_with_a_stable_error_code(self):
+        with patch.object(main, "interactive_session_manager", self.interactive), \
+             patch.object(main, "portal_session_manager", self.portal), \
+             patch.object(main, "prp_client", _TimedOutPRPClient()):
+            response = asyncio.run(main.list_prp_files(self.session_id, page=1, page_size=6))
+
+        self.assertEqual(504, response.status_code)
+        self.assertIn(b'"error_code":"prp_list_timeout"', response.body)
 
     def test_select_downloads_and_binds_only_current_session(self):
         with patch.object(main, "interactive_session_manager", self.interactive), \

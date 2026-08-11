@@ -304,7 +304,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         )
         self.assertRegex(
             done_css,
-            r"\.Pixso-group-115_40\.single-action\s*\{[^}]*left:\s*331px",
+            r"\.Pixso-group-115_43\.single-action\s*\{[^}]*left:\s*331px",
         )
         self.assertIn("single-action", done_view)
         self.assertIn('class="Pixso-group-115_43"', done_view)
@@ -313,6 +313,30 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertRegex(
             preview_css,
             r"\.Pixso-rectangle-97_455,\s*\.done-secondary-action-surface\s*\{",
+        )
+
+    def test_logout_actions_use_explicit_label_and_confirmation(self):
+        files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        logout = read_source(BASE_DIR / "modules/shared/logout.js")
+
+        self.assertIn('id="filesExit"', files_view)
+        self.assertIn(">退出登录</button>", files_view)
+        self.assertIn("confirmLogout", files_view)
+        self.assertIn("confirmLogout", done_view)
+        self.assertIn("退出登录", done_view)
+        self.assertIn("是否退出当前账号？", logout)
+
+    def test_done_view_makes_continue_primary_and_logout_secondary(self):
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+
+        self.assertRegex(
+            done_view,
+            r'button id="115_43"[^>]*>[\s\S]*?退出登录[\s\S]*?</button>',
+        )
+        self.assertRegex(
+            done_view,
+            r'button id="115_40"[^>]*>[\s\S]*?继续打印[\s\S]*?</button>',
         )
 
     def test_printer_fault_done_view_uses_main_countdown_until_recovered(self):
@@ -348,7 +372,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("checkPrinterAvailability", done_view)
         self.assertIn("on(\"donePrinterRefresh\"", done_view)
         self.assertRegex(done_view, r"startCountdown\(10,\s*checkPrinterAvailability\)")
-        self.assertRegex(done_view, r"setReturnEnabled\(true\)[\s\S]*?setRefreshEnabled\(false\)")
+        self.assertRegex(done_view, r"setLogoutEnabled\(true\)[\s\S]*?setRefreshEnabled\(false\)")
         self.assertRegex(done_view, r"startCountdown\(10,\s*leave\)")
 
     def test_preview_loading_locks_controls_and_pauses_countdown_for_every_preview_request(self):
@@ -377,7 +401,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("let doneLoading = false", done_view)
         self.assertIn("function beginLoading", done_view)
         self.assertIn("createMainCountdown", done_view)
-        self.assertIn("setReturnEnabled(false)", done_view)
+        self.assertIn("setLogoutEnabled(false)", done_view)
         self.assertIn("mainCountdown.stop()", done_view)
         self.assertIn("continueButton.disabled = true", done_view)
         self.assertIn("isPrinterFaultResult", done_view)
@@ -388,7 +412,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
         controller = read_source(BASE_DIR / "modules/app/app-controller.js")
 
-        self.assertIn('id="115_43"', done_view)
+        self.assertIn('id="115_40"', done_view)
         self.assertIn("continueToFiles", done_view)
         self.assertIn("source_origin === \"prp\"", done_view)
         self.assertIn("async function continueToFiles", controller)
@@ -557,7 +581,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("createMainCountdown", files_view)
         self.assertIn("await restartCycle()", files_view)
         self.assertIn("mainCountdown.destroy()", files_view)
-        self.assertIn("exit.disabled = busy", files_view)
+        self.assertIn("exit.disabled = isFilesExitDisabled({ exiting });", files_view)
         self.assertIn("let loading = false", files_view)
         self.assertIn("function beginLoading", files_view)
         self.assertIn("startCountdown(60", files_view)

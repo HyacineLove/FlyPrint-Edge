@@ -7,6 +7,7 @@ test("PRP file list renders a refresh action", () => {
   const html = prpFiles.renderPRPFilesView();
 
   assert.match(html, /<button id="filesRefresh"[^>]*type="button"[^>]*>刷新<\/button>/);
+  assert.match(html, /<button id="filesExit"[^>]*type="button"[^>]*>退出登录<\/button>/);
 });
 
 test("refresh action reloads the currently displayed page", () => {
@@ -52,4 +53,27 @@ test("recognizes an expired portal session for a user-visible logout message", (
   assert.equal(prpFiles.isPortalSessionInvalidError({ status: 401 }), true);
   assert.equal(prpFiles.isPortalSessionInvalidError({ code: "portal_session_invalid" }), true);
   assert.equal(prpFiles.isPortalSessionInvalidError({ status: 502 }), false);
+});
+
+test("exit remains available while a file-list request is loading", () => {
+  assert.equal(prpFiles.isFilesExitDisabled({ loading: true, exiting: false }), false);
+  assert.equal(prpFiles.isFilesExitDisabled({ loading: false, exiting: true }), true);
+});
+
+test("file-list timeout aborts the browser request and is distinguishable from user cancellation", async () => {
+  const timed = prpFiles.createTimedRequestSignal(null, 5);
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(timed.signal.aborted, true);
+  assert.equal(timed.didTimeout(), true);
+  timed.dispose();
+});
+
+test("maps stable PRP error codes to user actions instead of HTTP status text", () => {
+  assert.equal(prpFiles.mapPRPFileError({ code: "prp_unavailable" }), "文件服务暂时不可用，请稍后重试");
+  assert.equal(prpFiles.mapPRPFileError({ code: "prp_list_timeout" }), "文件列表加载超时，请检查网络后重试");
+  assert.equal(prpFiles.mapPRPFileError({ code: "prp_response_too_large" }), "文件列表响应异常，请稍后重试");
+  assert.equal(prpFiles.mapPRPFileError({ code: "file_too_large" }), "文件超过文件服务允许的下载大小，无法选择");
+  assert.equal(prpFiles.mapPRPFileError({ code: "content_hash_mismatch" }), "文件校验失败，请重新选择文件");
 });

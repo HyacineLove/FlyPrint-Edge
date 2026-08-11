@@ -64,8 +64,9 @@ def upload_and_preview(file_path: Path, file_type: str) -> Dict[str, object]:
         upload_started = time.perf_counter()
         with open(file_path, "rb") as handle:
             upload_resp = requests.post(
-                f"{CLOUD_BASE_URL}/api/v1/files?token={qr_data['token']}",
+                f"{CLOUD_BASE_URL}/api/v1/files",
                 files={"file": (file_path.name, handle, file_type)},
+                headers={"X-Fly-Print-File-Token": qr_data["token"]},
                 timeout=30,
             )
         if upload_resp.status_code == 401 and attempt == 0:

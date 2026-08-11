@@ -196,7 +196,7 @@ class HeartbeatService:
                 return 0
                 
             start_time = time.time()
-            url = f"{self.base_url}/api/v1/health"
+            url = f"{self.base_url}/health"
             # 使用较短的超时，仅用于测量
             requests.get(url, verify=self.verify_ssl, timeout=3)
             end_time = time.time()
@@ -223,7 +223,7 @@ class HeartbeatService:
             if not self.base_url:
                 return {"success": False, "message": "base_url 未配置"}
                 
-            url = f"{self.base_url}/api/v1/health"
+            url = f"{self.base_url}/health"
             logger.debug("Sending HTTP heartbeat: url=%s", url)
             
             response = requests.get(url, verify=self.verify_ssl, timeout=5)

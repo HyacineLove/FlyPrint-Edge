@@ -2,6 +2,7 @@ import { api, getJson, postJson } from "../shared/api.js";
 import { createMainCountdown } from "../shared/countdown.js";
 import { createRequestGate } from "../shared/request-gate.js";
 import { saveSessionState } from "../shared/session-state.js";
+import { confirmLogout } from "../shared/logout.js";
 
 const ITEM_KEYS = new Set([
   "id", "name", "media_type", "size", "sha256",
@@ -13,6 +14,7 @@ const SUPPORTED_MEDIA_TYPES = new Set([
   "image/jpeg",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
+const FILE_LIST_REQUEST_TIMEOUT_MS = 35_000;
 function fileTypeLabel(mediaType) {
   if (mediaType === "application/pdf") return "PDF";
   if (mediaType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "DOCX";
@@ -30,6 +32,54 @@ const PORTAL_SESSION_INVALID_CODES = new Set([
 export function isPortalSessionInvalidError(error) {
   const code = String(error?.code || "").trim().toLowerCase();
   return Number(error?.status) === 401 || PORTAL_SESSION_INVALID_CODES.has(code);
+}
+
+export function isFilesExitDisabled({ exiting = false } = {}) {
+  return Boolean(exiting);
+}
+
+export function createTimedRequestSignal(parentSignal, timeoutMs) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromParent = () => controller.abort();
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      abortFromParent();
+    } else {
+      parentSignal.addEventListener("abort", abortFromParent, { once: true });
+    }
+  }
+  const timer = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    dispose() {
+      globalThis.clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", abortFromParent);
+    },
+  };
+}
+
+export function mapPRPFileError(error) {
+  const code = String(error?.code || "").trim().toLowerCase();
+  const message = String(error?.message || "").trim();
+  const messages = {
+    prp_unavailable: "文件服务暂时不可用，请稍后重试",
+    prp_list_timeout: "文件列表加载超时，请检查网络后重试",
+    prp_list_failed: "文件列表暂时无法获取，请稍后重试",
+    prp_response_too_large: "文件列表响应异常，请稍后重试",
+    prp_download_failed: "文件下载失败，请重新选择文件",
+    file_not_found: "文件不存在或已过期，请刷新列表后重试",
+    file_too_large: "文件超过文件服务允许的下载大小，无法选择",
+    unsupported_file_type: "文件类型不支持，请选择其他文件",
+    content_length_mismatch: "文件传输不完整，请重新选择文件",
+    content_hash_mismatch: "文件校验失败，请重新选择文件",
+    invalid_prp_response: "文件服务返回的数据无效，请稍后重试",
+  };
+  return messages[code] || message || "文件操作失败，请稍后重试";
 }
 
 export function normalizePRPFilePage(payload) {
@@ -84,7 +134,7 @@ export function renderPRPFilesView() {
     </section>
 
     <div class="ui-action-region files-action-region files-action-region--single is-single">
-      <button id="filesExit" class="files-exit ui-action-button ui-action-button--primary" type="button">返回首页</button>
+      <button id="filesExit" class="files-exit ui-action-button ui-action-button--primary" type="button">退出登录</button>
     </div>
   </main>
 </div>`;
@@ -163,9 +213,9 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     previous.disabled = busy || filesFailureMode || currentPage <= 1;
     next.disabled = busy || filesFailureMode || currentPage >= pageCount;
     refresh.disabled = busy;
-    exit.disabled = busy;
+    exit.disabled = isFilesExitDisabled({ exiting });
     refresh.classList.toggle("is-loading", busy);
-    exit.classList.toggle("is-loading", busy);
+    exit.classList.toggle("is-loading", busy && exiting);
     list.querySelectorAll(".files-item").forEach((item) => {
       item.disabled = busy || filesFailureMode;
       item.classList.toggle("is-loading", busy);
@@ -177,8 +227,9 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     return requestGate.isCurrent(request) && appState.session.session_id === sessionId;
   }
 
-  async function exitToQrCode() {
+  async function exitToQrCode({ requireConfirmation = false } = {}) {
     if (exiting) return;
+    if (requireConfirmation && !confirmLogout()) return;
     exiting = true;
     mainCountdown.stop();
     requestGate.cancel();
@@ -192,12 +243,16 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     filesFailureMode = false;
     let loaded = false;
     let failureAction = () => load(page);
+    const timedRequest = createTimedRequestSignal(
+      request.signal,
+      FILE_LIST_REQUEST_TIMEOUT_MS,
+    );
     beginLoading();
     list.replaceChildren();
     try {
       const data = normalizePRPFilePage(await getJson(
         `${api.prpFiles}?session_id=${encodeURIComponent(sessionId)}&page=${page}&page_size=6`,
-        { signal: request.signal },
+        { signal: timedRequest.signal },
       ));
       if (!sessionIsCurrent(request)) return;
       filesFailureMode = false;
@@ -231,17 +286,21 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
         list.append(row);
       }
     } catch (error) {
-      if (sessionIsCurrent(request) && error?.name !== "AbortError") {
+      const timedOut = timedRequest.didTimeout();
+      if (sessionIsCurrent(request) && (error?.name !== "AbortError" || timedOut)) {
         filesFailureMode = true;
+        const displayError = timedOut ? { code: "prp_list_timeout" } : error;
+        error = { ...displayError, message: mapPRPFileError(displayError) };
         const reason = String(error?.message || "请稍后重试。").trim();
         if (isPortalSessionInvalidError(error)) {
           failureAction = exitToQrCode;
-          setStatus("账号已退出，请返回首页重新登录", "session-expired");
+          setStatus("账号已退出，请重新扫码登录", "session-expired");
         } else {
           setStatus(`文件列表获取失败：${reason}`, "error");
         }
       }
     } finally {
+      timedRequest.dispose();
       if (requestGate.finish(request)) {
         endLoading({
           retry: !loaded,
@@ -278,10 +337,11 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     } catch (error) {
       if (sessionIsCurrent(request) && error?.name !== "AbortError") {
         filesFailureMode = true;
+        error = { ...error, message: mapPRPFileError(error) };
         const reason = String(error?.message || "请稍后重试").trim();
         if (isPortalSessionInvalidError(error)) {
           failureAction = exitToQrCode;
-          setStatus("账号已退出，请返回首页重新登录", "session-expired");
+          setStatus("账号已退出，请重新扫码登录", "session-expired");
         } else {
           setStatus(`选择文件失败：${reason}`, "error");
         }
@@ -299,7 +359,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
   previous.onclick = () => void load(currentPage - 1);
   next.onclick = () => void load(currentPage + 1);
   refresh.onclick = createPRPFilesRefreshHandler(() => currentPage, load);
-  exit.onclick = () => void exitToQrCode();
+  exit.onclick = () => void exitToQrCode({ requireConfirmation: true });
   void load(1);
   return {
     destroy() {

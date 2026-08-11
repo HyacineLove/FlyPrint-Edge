@@ -19,7 +19,7 @@ class CloudHeartbeatServiceTests(unittest.TestCase):
 
         self.assertTrue(result["success"])
         get.assert_called_once_with(
-            "https://cloud.example.test/api/v1/health",
+            "https://cloud.example.test/health",
             verify=False,
             timeout=5,
         )

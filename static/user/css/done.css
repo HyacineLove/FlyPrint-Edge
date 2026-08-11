@@ -218,7 +218,7 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   z-index: 5;
 }
 
-.Pixso-group-115_40.single-action {
+.Pixso-group-115_43.single-action {
   left: 331px;
 }
 
@@ -377,6 +377,10 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
 
 .Pixso-group-115_43.ui-action-button {
   background: linear-gradient(135deg, #b9bfce, #b0acd0);
+}
+
+.Pixso-group-115_43.single-action.ui-action-button {
+  background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end));
 }
 
 .done-printer-refresh.ui-action-button {

@@ -18,6 +18,18 @@ class ConfigService:
     }
 
     MASKED_FIELDS = {"cloud.credential_blob"}
+    EDITABLE_SETTINGS = {
+        "default_paper_size",
+        "default_scale_percent",
+        "copies_min",
+        "copies_max",
+        "max_file_size_bytes",
+        "max_document_pages",
+        "max_list_items",
+        "libreoffice_path",
+        "log_level",
+        "debug_logging",
+    }
 
     def __init__(self, config_repo):
         self.config_repo = config_repo
@@ -69,6 +81,8 @@ class ConfigService:
             merged.setdefault(section, {})
             for key, value in update[section].items():
                 if section == "cloud" and key not in {"base_url", "node_name", "location", "heartbeat_interval", "verify_ssl"}:
+                    continue
+                if section == "settings" and key not in self.EDITABLE_SETTINGS:
                     continue
                 merged[section][key] = value
         merged.setdefault("cloud", {})
@@ -245,7 +259,7 @@ class ConfigService:
 
         try:
             response = requests.get(
-                f"{base_url}/api/v1/health",
+                f"{base_url}/health",
                 verify=bool(cloud.get("verify_ssl", True)),
                 timeout=5,
             )

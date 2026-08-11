@@ -149,6 +149,25 @@ class UploadTokenResponseCorrelationTests(unittest.TestCase):
 
         handler.upload_token_error_callback.assert_not_called()
 
+    def test_upload_token_prefers_fragment_web_url_over_programmatic_endpoint(self):
+        handler = self.make_handler()
+
+        handler.handle_upload_token({
+            "data": {
+                "request_id": "request-1",
+                "token": "opaque-token",
+                "expires_at": "2026-08-11T12:00:00Z",
+                "upload_url": "/api/v1/files",
+                "web_url": "/upload#token=opaque-token&node_id=node-1&printer_id=printer-1",
+            }
+        })
+
+        handler.upload_token_callback.assert_called_once_with(
+            "opaque-token",
+            "2026-08-11T12:00:00Z",
+            "/upload#token=opaque-token&node_id=node-1&printer_id=printer-1",
+        )
+
 
 class PrinterStatusSnapshotReportingTests(unittest.TestCase):
     def test_terminal_event_refreshes_printer_before_local_completion(self):

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import time
 from email.message import Message
 from email.utils import collapse_rfc2231_value
 from pathlib import Path
@@ -20,6 +22,7 @@ from edge_limits import DEFAULT_MAX_PRP_DOWNLOAD_BYTES
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_MAX_LIST_RESPONSE_BYTES = 1 << 20
 _MEDIA_EXTENSIONS = {
     "application/pdf": {".pdf"},
     "image/png": {".png"},
@@ -43,9 +46,15 @@ class PRPClient:
         *,
         connect_timeout: float = 5.0,
         read_timeout: float = 30.0,
+        total_timeout: float = 35.0,
         max_download_bytes: int = DEFAULT_MAX_PRP_DOWNLOAD_BYTES,
     ) -> None:
-        if connect_timeout <= 0 or read_timeout <= 0 or max_download_bytes <= 0:
+        if (
+            connect_timeout <= 0
+            or read_timeout <= 0
+            or total_timeout <= 0
+            or max_download_bytes <= 0
+        ):
             raise ValueError("PRP client limits must be positive")
         self._session = session or requests.Session()
         if session is None:
@@ -53,6 +62,7 @@ class PRPClient:
             self._session.mount("http://", adapter)
             self._session.mount("https://", adapter)
         self._timeout = (connect_timeout, read_timeout)
+        self._list_total_timeout = total_timeout
         self._max_download_bytes = max_download_bytes
 
     def list_files(
@@ -68,25 +78,51 @@ class PRPClient:
         ):
             raise PRPClientError("invalid_pagination")
         base_url, token = self._access(access_context)
+        started_at = time.monotonic()
+        response = None
         try:
             response = self._session.get(
                 base_url + "/api/v1/files",
                 params={"page": page, "page_size": page_size},
                 headers={"Authorization": "Bearer " + token},
-                timeout=self._timeout,
+                timeout=(
+                    min(self._timeout[0], self._list_total_timeout),
+                    min(self._timeout[1], self._list_total_timeout),
+                ),
+                stream=True,
             )
         except requests.RequestException as exc:
             raise PRPClientError("prp_unavailable") from exc
-        if response.status_code != 200:
-            raise PRPClientError("prp_list_failed")
-        if len(response.content) > 1 << 20:
-            raise PRPClientError("prp_response_too_large")
         try:
-            payload = response.json()
-        except ValueError as exc:
-            raise PRPClientError("invalid_prp_response") from exc
-        self._validate_file_list(payload, page, page_size)
-        return payload
+            if response.status_code != 200:
+                raise PRPClientError("prp_list_failed")
+            declared_length = response.headers.get("Content-Length")
+            if declared_length:
+                try:
+                    if int(declared_length) > _MAX_LIST_RESPONSE_BYTES:
+                        raise PRPClientError("prp_response_too_large")
+                except ValueError as exc:
+                    raise PRPClientError("invalid_prp_response") from exc
+
+            body = bytearray()
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if time.monotonic() - started_at > self._list_total_timeout:
+                    raise PRPClientError("prp_list_timeout")
+                if not chunk:
+                    continue
+                body.extend(chunk)
+                if len(body) > _MAX_LIST_RESPONSE_BYTES:
+                    raise PRPClientError("prp_response_too_large")
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError) as exc:
+                raise PRPClientError("invalid_prp_response") from exc
+            self._validate_file_list(payload, page, page_size)
+            return payload
+        except requests.RequestException as exc:
+            raise PRPClientError("prp_unavailable") from exc
+        finally:
+            response.close()
 
     def download_file(
         self, access_context: Dict[str, Any], file_id: str, destination: Path

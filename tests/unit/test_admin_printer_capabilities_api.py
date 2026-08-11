@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import main
+from printing.service import DEVICE_JOBS
 
 
 class DummyConfig:
@@ -100,6 +101,19 @@ class AdminPrinterCapabilitiesApiTests(unittest.TestCase):
             self.assertEqual(409, response.status_code)
             self.assertIn("请勿重复提交", response.body.decode("utf-8"))
         finally:
+            main.active_printer_tests.clear()
+            main.printer_test_tasks.clear()
+
+    def test_unconfirmed_printer_rejects_test_before_creating_task(self):
+        DEVICE_JOBS.mark_uncertain("urn:uuid:printer-1", "ipp_job_query_failed")
+        try:
+            with patch.object(main, "printer_manager", self.printer_manager):
+                response = asyncio.run(main.start_printer_test("printer-1"))
+            self.assertEqual(409, response.status_code)
+            self.assertIn("解除结果未知锁定", response.body.decode("utf-8"))
+            self.assertEqual({}, main.printer_test_tasks)
+        finally:
+            DEVICE_JOBS.clear_uncertain("urn:uuid:printer-1")
             main.active_printer_tests.clear()
             main.printer_test_tasks.clear()
 

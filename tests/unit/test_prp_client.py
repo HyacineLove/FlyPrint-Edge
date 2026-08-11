@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -140,6 +141,34 @@ class PRPClientTests(unittest.TestCase):
         _PRPHandler.mode = "bad_pagination"
         with self.assertRaises(PRPClientError):
             self.client.list_files(self.access, 1, 20)
+
+    def test_list_enforces_a_total_deadline_while_reading_a_slow_response(self):
+        class SlowResponse:
+            status_code = 200
+            headers = {"Content-Length": "100"}
+
+            def iter_content(self, chunk_size):
+                del chunk_size
+                yield b'{"items":[],'
+                time.sleep(0.03)
+                yield b'"page":1,"page_size":20,"total":0}'
+
+            def close(self):
+                return None
+
+        class SlowSession:
+            def get(self, *_args, **_kwargs):
+                return SlowResponse()
+
+        client = PRPClient(
+            session=SlowSession(),
+            connect_timeout=1,
+            read_timeout=1,
+            total_timeout=0.01,
+        )
+
+        with self.assertRaisesRegex(PRPClientError, "prp_list_timeout"):
+            client.list_files(self.access, 1, 20)
 
     def test_download_rejects_wrong_length_and_removes_partial_file(self):
         _PRPHandler.mode = "wrong_length"
