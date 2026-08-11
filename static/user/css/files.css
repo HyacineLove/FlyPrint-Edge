@@ -269,3 +269,28 @@
     min-height: 100vh;
   }
 }
+.provider-tabs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 24px 14px;
+  scrollbar-width: thin;
+}
+
+.provider-tab {
+  flex: 0 0 auto;
+  min-width: 112px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #b9c5d6;
+  border-radius: 22px;
+  background: #fff;
+  color: #34455c;
+  font-weight: 600;
+}
+
+.provider-tab[data-active="true"] {
+  border-color: #2476df;
+  background: #2476df;
+  color: #fff;
+}

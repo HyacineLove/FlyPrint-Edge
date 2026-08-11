@@ -34,7 +34,7 @@ class SitePortalClientTests(unittest.TestCase):
             "site_portal_code": "official",
             "external_user_id": "external-user-1",
             "display_name": "张老师",
-            "prp_base_url": "https://prp.example.test",
+            "providers": [{"provider_id": "prp-a", "display_name": "文件库 A", "prp_base_url": "https://prp.example.test"}],
             "access_token": "private-token",
             "access_token_expires_at": "2099-07-30T12:05:00Z",
         }))

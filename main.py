@@ -1136,9 +1136,16 @@ async def get_current_interactive_session():
         _report_terminal_session_state(None)
     return interactive_session_manager.build_snapshot()
 
-@app.get("/api/prp/files")
-async def list_prp_files(session_id: str, page: int = 1, page_size: int = 20):
-    access_context = portal_session_manager.get_access_context(session_id)
+@app.get("/api/prp/providers")
+async def list_prp_providers(session_id: str):
+    snapshot = portal_session_manager.snapshot()
+    if not snapshot.get("active") or snapshot.get("terminal_session_id") != session_id or not interactive_session_manager.matches(session_id):
+        return JSONResponse(status_code=401, content={"success": False, "error_code": "portal_session_invalid"})
+    return {"items": snapshot.get("providers", [])}
+
+@app.get("/api/prp/providers/{provider_id}/files")
+async def list_prp_provider_files(provider_id: str, session_id: str, page: int = 1, page_size: int = 20):
+    access_context = portal_session_manager.get_access_context(session_id, provider_id)
     if not access_context or not interactive_session_manager.matches(session_id):
         return JSONResponse(
             status_code=401,
@@ -1156,17 +1163,21 @@ async def list_prp_files(session_id: str, page: int = 1, page_size: int = 20):
             content={"success": False, "error_code": exc.code},
         )
 
-@app.post("/api/prp/files/{file_id}/select")
-async def select_prp_file(file_id: str, request: Request):
+async def list_prp_files(session_id: str, page: int = 1, page_size: int = 20):
+    """Compatibility helper for direct Python callers; the HTTP API is Provider-scoped."""
+    return await list_prp_provider_files("default", session_id, page, page_size)
+
+@app.post("/api/prp/providers/{provider_id}/files/{file_id}/select")
+async def select_prp_provider_file(provider_id: str, file_id: str, request: Request):
     body = await request.json()
     session_id = body.get("session_id")
-    access_context = portal_session_manager.get_access_context(session_id)
+    access_context = portal_session_manager.get_access_context(session_id, provider_id)
     if not access_context or not interactive_session_manager.matches(session_id):
         return JSONResponse(
             status_code=401,
             content={"success": False, "error_code": "portal_session_invalid"},
         )
-    cached = prp_file_selection_manager.activate_cached(session_id, file_id)
+    cached = prp_file_selection_manager.activate_cached(session_id, file_id, provider_id)
     if cached:
         if interactive_session_manager.bind_prp_file(session_id, cached):
             logger.info("PRP source cache hit: session_id=%s file_id=%s", session_id, file_id)
@@ -1176,13 +1187,13 @@ async def select_prp_file(file_id: str, request: Request):
     destination = None
     downloaded_source = None
     try:
-        destination = prp_file_selection_manager.destination_for(session_id, file_id)
+        destination = prp_file_selection_manager.destination_for(session_id, file_id, provider_id)
         downloaded = await asyncio.to_thread(
             prp_client.download_file, access_context, file_id, destination
         )
         downloaded_source = Path(downloaded["path"])
         public = prp_file_selection_manager.bind(
-            session_id, downloaded, downloaded_source
+            session_id, downloaded, downloaded_source, provider_id
         )
         if not interactive_session_manager.bind_prp_file(session_id, public):
             prp_file_selection_manager.release_selection(session_id)
@@ -1202,6 +1213,10 @@ async def select_prp_file(file_id: str, request: Request):
             status_code=502,
             content={"success": False, "error_code": code},
         )
+
+async def select_prp_file(file_id: str, request: Request):
+    """Compatibility helper for direct Python callers; the HTTP API is Provider-scoped."""
+    return await select_prp_provider_file("default", file_id, request)
 
 @app.post("/api/prp/selection")
 async def clear_prp_selection(request: Request):
@@ -1321,7 +1336,9 @@ async def preview(request: Request):
             nonlocal download_ms
             download_started_at = time.perf_counter()
             if is_prp_source:
-                source_path = prp_file_selection_manager.get_source(session_id, file_id)
+                source_path = prp_file_selection_manager.get_source(
+                    session_id, file_id, str(active_session.get("provider_id") or "default")
+                )
                 downloaded_path = str(source_path) if source_path else None
                 download_error = None if source_path else "PRP source is unavailable"
             else:

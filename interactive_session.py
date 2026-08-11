@@ -33,6 +33,7 @@ class InteractiveSessionManager:
                 "display_name": None,
                 "state": "awaiting_preview",
                 "file_id": None,
+                "provider_id": None,
                 "source_origin": None,
                 "file_url": None,
                 "file_name": None,
@@ -89,6 +90,7 @@ class InteractiveSessionManager:
             if not self._active_session or self._active_session["session_id"] != session_id:
                 return False
             self._active_session["source_origin"] = "prp"
+            self._active_session["provider_id"] = metadata.get("provider_id") or "default"
             self._active_session["file_id"] = metadata["file_id"]
             self._active_session["file_url"] = None
             self._active_session["file_name"] = metadata["file_name"]
@@ -132,6 +134,7 @@ class InteractiveSessionManager:
                 return None
             for field in (
                 "source_origin",
+                "provider_id",
                 "file_id",
                 "file_url",
                 "file_name",
@@ -499,6 +502,8 @@ class InteractiveSessionManager:
                 snapshot["content_hash"] = self._active_session.get("content_hash")
             if self._active_session.get("source_origin"):
                 snapshot["source_origin"] = self._active_session.get("source_origin")
+            if self._active_session.get("provider_id"):
+                snapshot["provider_id"] = self._active_session.get("provider_id")
             if self._active_session.get("size") is not None:
                 snapshot["size"] = self._active_session.get("size")
             if self._active_session.get("initial_print_options"):

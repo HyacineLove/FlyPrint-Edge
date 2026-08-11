@@ -592,10 +592,10 @@ class UserPreviewAssetTests(unittest.TestCase):
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
         api = read_source(BASE_DIR / "modules/shared/api.js")
 
-        self.assertIn("createRequestGate", files_view)
-        self.assertIn("requestGate.isCurrent", files_view)
-        self.assertIn("requestGate.cancel()", files_view)
-        self.assertIn("signal: request.signal", files_view)
+        self.assertIn("const controllers = new Map()", files_view)
+        self.assertIn("controllers.get(providerID)?.abort()", files_view)
+        self.assertIn("controllers.get(providerID) !== controller", files_view)
+        self.assertIn("controllers.forEach((controller) => controller.abort())", files_view)
         self.assertIn("fetch(url, { cache: \"no-store\", ...options })", api)
 
     def test_file_navigation_failures_use_countdown_retry_without_finite_attempts(self):

@@ -65,6 +65,19 @@ class PRPClient:
         self._list_total_timeout = total_timeout
         self._max_download_bytes = max_download_bytes
 
+    @staticmethod
+    def _failure_code(response, fallback: str) -> str:
+        if response.status_code != 401:
+            return fallback
+        try:
+            body = response.json()
+            code = body.get("error", {}).get("code") if isinstance(body, dict) else ""
+            if isinstance(code, str) and code in {"auth_required", "token_expired", "token_invalid"}:
+                return code
+        except (ValueError, requests.RequestException):
+            pass
+        return "auth_required"
+
     def list_files(
         self, access_context: Dict[str, Any], page: int, page_size: int
     ) -> Dict[str, Any]:
@@ -95,7 +108,7 @@ class PRPClient:
             raise PRPClientError("prp_unavailable") from exc
         try:
             if response.status_code != 200:
-                raise PRPClientError("prp_list_failed")
+                raise PRPClientError(self._failure_code(response, "prp_list_failed"))
             declared_length = response.headers.get("Content-Length")
             if declared_length:
                 try:
@@ -144,7 +157,7 @@ class PRPClient:
             )
             if response.status_code != 200:
                 raise PRPClientError(
-                    "file_not_found" if response.status_code == 404 else "prp_download_failed"
+                    "file_not_found" if response.status_code == 404 else self._failure_code(response, "prp_download_failed")
                 )
             declared_length = self._required_length(response)
             declared_hash = response.headers.get("X-Content-SHA256", "")

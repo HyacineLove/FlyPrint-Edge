@@ -56,7 +56,7 @@ class SitePortalClient:
             "site_portal_code",
             "external_user_id",
             "display_name",
-            "prp_base_url",
+            "providers",
             "access_token",
             "access_token_expires_at",
         }
@@ -64,11 +64,22 @@ class SitePortalClient:
             raise SitePortalProtocolError("Site Portal 领取响应不完整")
         if payload.get("site_portal_code") != site_portal_code:
             raise SitePortalProtocolError("Site Portal 领取响应来源不匹配")
-        prp = urlparse(str(payload.get("prp_base_url") or ""))
-        if prp.scheme not in {"http", "https"} or not prp.netloc or prp.username or prp.password:
-            raise SitePortalProtocolError("PRP 地址无效")
+        providers = payload.get("providers")
+        if not isinstance(providers, list) or not providers:
+            raise SitePortalProtocolError("PRP Provider 列表无效")
+        seen = set()
+        for provider in providers:
+            if not isinstance(provider, dict):
+                raise SitePortalProtocolError("PRP Provider 列表无效")
+            provider_id = str(provider.get("provider_id") or "").strip()
+            display_name = str(provider.get("display_name") or "").strip()
+            prp = urlparse(str(provider.get("prp_base_url") or ""))
+            if (not provider_id or provider_id in seen or not display_name or
+                    prp.scheme not in {"http", "https"} or not prp.netloc or prp.username or prp.password):
+                raise SitePortalProtocolError("PRP Provider 地址无效")
+            seen.add(provider_id)
         if not _parse_utc_timestamp(payload.get("access_token_expires_at")):
             raise SitePortalProtocolError("PRP 访问凭证有效期无效")
-        if not all(str(payload.get(field) or "").strip() for field in required):
+        if not all(str(payload.get(field) or "").strip() for field in required - {"providers"}):
             raise SitePortalProtocolError("Site Portal 领取响应包含空字段")
         return dict(payload)

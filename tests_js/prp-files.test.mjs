@@ -6,6 +6,7 @@ import * as prpFiles from "../static/user/modules/app/prp-files.js";
 test("PRP file list renders a refresh action", () => {
   const html = prpFiles.renderPRPFilesView();
 
+  assert.match(html, /id="providerTabs"/);
   assert.match(html, /<button id="filesRefresh"[^>]*type="button"[^>]*>刷新<\/button>/);
   assert.match(html, /<button id="filesExit"[^>]*type="button"[^>]*>退出登录<\/button>/);
 });

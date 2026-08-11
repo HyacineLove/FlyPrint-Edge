@@ -61,6 +61,21 @@ class PRPFileSelectionManagerTests(unittest.TestCase):
         self.assertNotIn("access_token", snapshot)
         self.assertEqual("prp", snapshot["source_origin"])
 
+    def test_same_file_id_from_two_providers_uses_separate_sources(self):
+        source_a = self.manager.destination_for("session-1", "file-1", "prp-a")
+        source_b = self.manager.destination_for("session-1", "file-1", "prp-b")
+        source_a.write_bytes(b"from-a")
+        source_b.write_bytes(b"from-b")
+
+        self.manager.bind("session-1", self._metadata("file-1"), source_a, "prp-a")
+        self.assertEqual("file-1", self.manager.release_selection("session-1"))
+        self.manager.bind("session-1", self._metadata("file-1"), source_b, "prp-b")
+
+        self.assertEqual(source_b, self.manager.get_source("session-1", "file-1", "prp-b"))
+        self.assertEqual(b"from-a", source_a.read_bytes())
+        self.assertTrue(self.manager.activate_cached("session-1", "file-1", "prp-a"))
+        self.assertEqual(source_a, self.manager.get_source("session-1", "file-1", "prp-a"))
+
     @staticmethod
     def _metadata(file_id):
         return {
