@@ -23,6 +23,20 @@ export function createMainCountdown({ render } = {}) {
     draw();
   };
 
+  const pause = () => {
+    if (!active) return;
+    active = false;
+    phase = "loading";
+    draw();
+  };
+
+  const resume = () => {
+    if (active || value <= 0 || !onExpire) return;
+    active = true;
+    phase = "counting";
+    draw();
+  };
+
   const start = (seconds, action) => {
     value = Math.max(0, Number(seconds) || 0);
     onExpire = typeof action === "function" ? action : null;
@@ -48,6 +62,8 @@ export function createMainCountdown({ render } = {}) {
   return {
     start,
     stop,
+    pause,
+    resume,
     get value() {
       return value;
     },

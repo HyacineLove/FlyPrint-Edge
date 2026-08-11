@@ -138,12 +138,25 @@ class PRPClient:
             response.close()
 
     def download_file(
-        self, access_context: Dict[str, Any], file_id: str, destination: Path
+        self,
+        access_context: Dict[str, Any],
+        file_id: str,
+        destination: Path,
+        max_file_size_bytes: int | None = None,
     ) -> Dict[str, Any]:
         if not isinstance(file_id, str) or not _FILE_ID_RE.fullmatch(file_id):
             raise PRPClientError("file_not_found")
         if not isinstance(destination, Path) or not destination.parent.is_dir():
             raise PRPClientError("invalid_destination")
+        edge_limit = (
+            max_file_size_bytes
+            if isinstance(max_file_size_bytes, int)
+            and not isinstance(max_file_size_bytes, bool)
+            and max_file_size_bytes > 0
+            else None
+        )
+        max_download_bytes = min(self._max_download_bytes, edge_limit) if edge_limit else self._max_download_bytes
+        size_limit_code = "edge_file_size_exceeded" if edge_limit and edge_limit <= self._max_download_bytes else "file_too_large"
         base_url, token = self._access(access_context)
         partial = destination.with_name(destination.name + ".part")
         partial.unlink(missing_ok=True)
@@ -159,7 +172,7 @@ class PRPClient:
                 raise PRPClientError(
                     "file_not_found" if response.status_code == 404 else self._failure_code(response, "prp_download_failed")
                 )
-            declared_length = self._required_length(response)
+            declared_length = self._required_length(response, max_download_bytes, size_limit_code)
             declared_hash = response.headers.get("X-Content-SHA256", "")
             if not _SHA256_RE.fullmatch(declared_hash):
                 raise PRPClientError("invalid_prp_response")
@@ -177,8 +190,8 @@ class PRPClient:
                         if not chunk:
                             continue
                         size += len(chunk)
-                        if size > self._max_download_bytes:
-                            raise PRPClientError("file_too_large")
+                        if size > max_download_bytes:
+                            raise PRPClientError(size_limit_code)
                         output.write(chunk)
                         digest.update(chunk)
                     output.flush()
@@ -284,7 +297,7 @@ class PRPClient:
         ):
             raise PRPClientError("invalid_prp_response")
 
-    def _required_length(self, response: requests.Response) -> int:
+    def _required_length(self, response: requests.Response, max_download_bytes: int, size_limit_code: str) -> int:
         raw = response.headers.get("Content-Length", "")
         try:
             length = int(raw)
@@ -292,8 +305,8 @@ class PRPClient:
             raise PRPClientError("invalid_prp_response") from exc
         if length < 0:
             raise PRPClientError("invalid_prp_response")
-        if length > self._max_download_bytes:
-            raise PRPClientError("file_too_large")
+        if length > max_download_bytes:
+            raise PRPClientError(size_limit_code)
         return length
 
     @staticmethod

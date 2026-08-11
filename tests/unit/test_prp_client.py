@@ -187,6 +187,14 @@ class PRPClientTests(unittest.TestCase):
             self.assertEqual("sample.pdf", metadata["name"])
             self.assertFalse(Path(str(destination) + ".part").exists())
 
+    def test_download_honors_a_smaller_edge_file_size_limit_before_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.pdf"
+            with self.assertRaisesRegex(PRPClientError, "edge_file_size_exceeded"):
+                self.client.download_file(self.access, "file-1", destination, max_file_size_bytes=5)
+            self.assertFalse(destination.exists())
+            self.assertFalse(Path(str(destination) + ".part").exists())
+
     def test_download_accepts_utf8_filename_parameter(self):
         _PRPHandler.mode = "unicode_filename"
         with tempfile.TemporaryDirectory() as directory:

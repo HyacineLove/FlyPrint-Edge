@@ -86,7 +86,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         ):
             self.assertIn(selector, common_css)
 
-    def test_countdown_views_use_shared_markup_and_explicit_loading_stop(self):
+    def test_countdown_views_use_shared_markup_and_explicit_loading_lifecycle(self):
         views = {
             "login": read_source(BASE_DIR / "modules/views/login-view.js"),
             "preview": read_source(BASE_DIR / "modules/views/preview-view.js"),
@@ -98,7 +98,11 @@ class UserPreviewAssetTests(unittest.TestCase):
                 self.assertIn("ui-main-countdown", source)
                 self.assertIn("ui-countdown-ring", source)
                 self.assertIn("ui-countdown-value", source)
-                self.assertIn('stop("loading")', source)
+                if name == "files":
+                    self.assertIn("mainCountdown.pause()", source)
+                    self.assertIn("mainCountdown.resume()", source)
+                else:
+                    self.assertIn('stop("loading")', source)
         self.assertNotIn('id="77_42"', views["preview"])
         self.assertNotIn('id="77_44"', views["preview"])
 
@@ -583,9 +587,10 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("mainCountdown.destroy()", files_view)
         self.assertIn("exit.disabled = isFilesExitDisabled({ exiting });", files_view)
         self.assertIn("let loading = false", files_view)
-        self.assertIn("function beginLoading", files_view)
-        self.assertIn("startCountdown(60", files_view)
-        self.assertIn("startCountdown(10", files_view)
+        self.assertIn("function syncCountdown", files_view)
+        self.assertIn("mainCountdown.start(60", files_view)
+        self.assertIn("mainCountdown.pause()", files_view)
+        self.assertIn("mainCountdown.resume()", files_view)
         self.assertNotIn("pointerdown", files_view)
 
     def test_prp_files_view_guards_duplicate_and_stale_requests(self):
@@ -598,7 +603,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("controllers.forEach((controller) => controller.abort())", files_view)
         self.assertIn("fetch(url, { cache: \"no-store\", ...options })", api)
 
-    def test_file_navigation_failures_use_countdown_retry_without_finite_attempts(self):
+    def test_file_navigation_failures_keep_the_session_countdown_without_auto_retry(self):
         api = read_source(BASE_DIR / "modules/shared/api.js")
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
         preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
@@ -606,8 +611,8 @@ class UserPreviewAssetTests(unittest.TestCase):
 
         self.assertIn("getJson(", files_view)
         self.assertIn("createMainCountdown", files_view)
-        self.assertIn("startCountdown(60", files_view)
-        self.assertIn("startCountdown(10", files_view)
+        self.assertIn("mainCountdown.start(60", files_view)
+        self.assertNotIn("startCountdown(10", files_view)
         self.assertNotIn("isTransientRequestError(error)", files_view)
         self.assertNotIn("filesRetryTimer", files_view)
         self.assertNotIn("filesRetryCountdown", files_view)

@@ -28,7 +28,7 @@ class _FakePRPClient:
     def list_files(self, _access, page, page_size):
         return {"items": [], "page": page, "page_size": page_size, "total": 0}
 
-    def download_file(self, _access, file_id, destination):
+    def download_file(self, _access, file_id, destination, max_file_size_bytes=None):
         if self.fail:
             Path(str(destination) + ".part").write_bytes(b"partial")
             raise PRPClientError("content_hash_mismatch")

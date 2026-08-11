@@ -1188,8 +1188,13 @@ async def select_prp_provider_file(provider_id: str, file_id: str, request: Requ
     downloaded_source = None
     try:
         destination = prp_file_selection_manager.destination_for(session_id, file_id, provider_id)
+        edge_file_limit = normalize_local_limits(_get_settings())["max_file_size_bytes"]
         downloaded = await asyncio.to_thread(
-            prp_client.download_file, access_context, file_id, destination
+            prp_client.download_file,
+            access_context,
+            file_id,
+            destination,
+            edge_file_limit or None,
         )
         downloaded_source = Path(downloaded["path"])
         public = prp_file_selection_manager.bind(
@@ -1210,7 +1215,7 @@ async def select_prp_provider_file(provider_id: str, file_id: str, request: Requ
             downloaded_source.unlink(missing_ok=True)
         code = exc.code if isinstance(exc, PRPClientError) else "invalid_prp_response"
         return JSONResponse(
-            status_code=502,
+            status_code=413 if code in {"file_too_large", "edge_file_size_exceeded"} else 502,
             content={"success": False, "error_code": code},
         )
 

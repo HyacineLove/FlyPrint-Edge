@@ -3,13 +3,13 @@ import test from "node:test";
 
 import { LOGOUT_CONFIRMATION_TEXT, confirmLogout } from "../static/user/modules/shared/logout.js";
 
-test("logout requires an explicit confirmation", () => {
-  const prompts = [];
+test("logout uses an explicit application confirmation dialog", async () => {
+  const dialogs = [];
 
-  assert.equal(confirmLogout((message) => {
-    prompts.push(message);
+  assert.equal(await confirmLogout((options) => {
+    dialogs.push(options);
     return false;
   }), false);
-  assert.deepEqual(prompts, [LOGOUT_CONFIRMATION_TEXT]);
-  assert.equal(confirmLogout(() => true), true);
+  assert.deepEqual(dialogs, [{ title: "退出登录", message: LOGOUT_CONFIRMATION_TEXT, confirmText: "确认退出" }]);
+  assert.equal(await confirmLogout(() => true), true);
 });

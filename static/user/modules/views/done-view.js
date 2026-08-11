@@ -113,9 +113,9 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     if (continueButton) continueButton.disabled = true;
   }
 
-  function leave({ requireConfirmation = false } = {}) {
+  async function leave({ requireConfirmation = false } = {}) {
     if (continueInFlight || doneLoading) return;
-    if (requireConfirmation && !confirmLogout()) return;
+    if (requireConfirmation && !(await confirmLogout())) return;
     beginLoading();
     mainCountdown.stop();
     void restartCycle();
@@ -175,7 +175,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     setRefreshEnabled(true);
     startCountdown(10, checkPrinterAvailability);
     on("donePrinterRefresh", () => void checkPrinterAvailability());
-    on("115_43", () => leave({ requireConfirmation: true }));
+    on("115_43", () => void leave({ requireConfirmation: true }));
     return {
       destroy() {
         mainCountdown.destroy();
@@ -195,7 +195,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     startCountdown(10, leave);
   }
 
-  on("115_43", () => leave({ requireConfirmation: true }));
+  on("115_43", () => void leave({ requireConfirmation: true }));
   on("115_40", () => void continueSelection());
 
   return {

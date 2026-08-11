@@ -50,6 +50,12 @@ test("PRP file page accepts PDF, image and DOCX metadata", () => {
   assert.equal(result.items.length, 3);
 });
 
+test("large listed files are blocked before a download request starts", () => {
+  assert.equal(prpFiles.exceedsLocalFileSize({ size: 15 * 1024 * 1024 }, 5 * 1024 * 1024), true);
+  assert.equal(prpFiles.exceedsLocalFileSize({ size: 5 * 1024 * 1024 }, 5 * 1024 * 1024), false);
+  assert.equal(prpFiles.exceedsLocalFileSize({ size: 15 * 1024 * 1024 }, 0), false);
+});
+
 test("recognizes an expired portal session for a user-visible logout message", () => {
   assert.equal(prpFiles.isPortalSessionInvalidError({ status: 401 }), true);
   assert.equal(prpFiles.isPortalSessionInvalidError({ code: "portal_session_invalid" }), true);
