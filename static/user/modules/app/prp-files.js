@@ -84,8 +84,11 @@ export function renderPRPFilesView() {
   return `<div class="files-terminal-shell fill-bg-gradient"><main id="filesView" class="files-view"><header class="files-header"><div class="files-header-title-row"><h1 id="filesGreeting">请选择文件</h1><button id="filesRefresh" class="files-refresh ui-pager-button" type="button">刷新</button></div><div class="files-countdown ui-main-countdown" data-countdown-phase="idle"><span class="ui-countdown-ring"></span><strong id="filesCountdown" class="ui-countdown-value">--</strong></div><p id="filesClock" class="files-clock"></p></header><section class="files-source-switch" aria-label="文件来源"><span class="files-source-label">文件来源</span><nav id="providerTabs" class="provider-tabs" aria-label="文件来源"></nav></section><section id="filesPanel" class="files-panel" aria-busy="true"><div class="files-panel-heading"><h2>文件列表</h2><p id="filesStatus" class="files-status" aria-live="polite"></p></div><div id="filesList" class="files-list" role="list"></div><div class="files-pager"><button id="filesPrev" type="button">上一页</button><span id="filesPage">1 / 1</span><button id="filesNext" type="button">下一页</button></div></section><div class="ui-action-region files-action-region files-action-region--single is-single"><button id="filesExit" class="files-exit ui-action-button ui-action-button--primary" type="button">退出登录</button></div></main></div>`;
 }
 
-export function createPRPFilesRefreshHandler(getCurrentPage, load) {
-  return () => void load(getCurrentPage());
+export function createPRPFilesRefreshHandler(getCurrentPage, resetCountdown, load) {
+  return () => {
+    resetCountdown();
+    void load(getCurrentPage());
+  };
 }
 
 export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
@@ -129,6 +132,10 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     else mainCountdown.resume();
   }
 
+  function resetListCountdown() {
+    if (!exiting) mainCountdown.start(60, exitToQrCode);
+  }
+
   function renderTabs() {
     tabs.replaceChildren(...Array.from(states.values()).map((state) => {
       const button = document.createElement("button");
@@ -138,6 +145,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       button.dataset.active = String(state.id === activeProvider);
       button.onclick = () => {
         activeProvider = state.id;
+        resetListCountdown();
         syncCountdown();
         renderTabs();
         renderCurrent();
@@ -275,9 +283,21 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     }
   }
 
-  previous.onclick = () => void load(activeProvider, Math.max(1, (current()?.page || 1) - 1));
-  next.onclick = () => void load(activeProvider, (current()?.page || 1) + 1);
-  refresh.onclick = () => void load(activeProvider, current()?.page || 1);
+  previous.onclick = createPRPFilesRefreshHandler(
+    () => Math.max(1, (current()?.page || 1) - 1),
+    resetListCountdown,
+    (page) => load(activeProvider, page),
+  );
+  next.onclick = createPRPFilesRefreshHandler(
+    () => (current()?.page || 1) + 1,
+    resetListCountdown,
+    (page) => load(activeProvider, page),
+  );
+  refresh.onclick = createPRPFilesRefreshHandler(
+    () => current()?.page || 1,
+    resetListCountdown,
+    (page) => load(activeProvider, page),
+  );
   exit.onclick = async () => {
     if (await confirmLogout()) await exitToQrCode();
   };

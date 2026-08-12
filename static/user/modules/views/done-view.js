@@ -3,6 +3,8 @@ import { api, getJson } from "../shared/api.js";
 import { createMainCountdown } from "../shared/countdown.js";
 import { confirmLogout } from "../shared/logout.js";
 import {
+  canContinueToFilesAfterDone,
+  faultAvailabilityMessage,
   isFaultLockedDoneResult,
   isPrinterFaultDoneResult,
   isUnconfirmedDoneResult,
@@ -38,13 +40,13 @@ export function renderDoneView() {
 `;
 }
 
-export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) {
+export function bindDoneViewEvents({ appState, restartCycle, continueToFiles, returnToHome }) {
   const result = appState.session.doneResult || { type: "success", message: "" };
-  const canContinueToFiles = Boolean(
-    result.type === "success" &&
-    appState.session?.session_id &&
-    appState.session?.file?.source_origin === "prp",
-  );
+  const canContinueToFiles = canContinueToFilesAfterDone({
+    result,
+    sessionId: appState.session?.session_id,
+    sourceOrigin: appState.session?.file?.source_origin,
+  });
   const logoutButton = document.getElementById("115_43");
   const logoutLabel = logoutButton?.querySelector(".Pixso-paragraph-115_45");
   logoutButton?.classList.add("ui-action-button", "ui-action-button--secondary");
@@ -119,14 +121,13 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
       const availability = await getJson(api.printerAvailability);
       if (!availability?.faulted) {
         setText(["77_21"], "打印机已恢复，可退出登录后继续使用");
-        if (isFaultLockedDoneResult(result) && logoutLabel) logoutLabel.textContent = "返回首页";
         setLogoutEnabled(true);
         setRefreshEnabled(false);
         doneLoading = false;
-        startCountdown(10, leave);
+        startCountdown(10, () => returnToHome?.());
         return;
       }
-      setText(["77_21"], "打印机仍需处理，请检查后重试");
+      setText(["77_21"], faultAvailabilityMessage(availability));
     } catch (error) {
       setText(["77_21"], error?.message || "打印机状态检测失败，请重试");
     } finally {
@@ -164,12 +165,12 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     if (refreshButton) refreshButton.hidden = false;
     refreshButton?.classList.add("fault-action");
     logoutButton?.classList.add("fault-session-exited");
-    if (logoutLabel) logoutLabel.textContent = "已退出";
+    if (logoutLabel) logoutLabel.textContent = "返回首页";
     setLogoutEnabled(false);
     setRefreshEnabled(true);
     startCountdown(10, checkPrinterAvailability);
     on("donePrinterRefresh", () => void checkPrinterAvailability());
-    on("115_43", () => void leave({ requireConfirmation: true }));
+    on("115_43", () => void returnToHome?.());
     return {
       destroy() {
         mainCountdown.destroy();
@@ -182,6 +183,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     setText(["77_18"], "打印失败");
     setText(["77_21"], result.message || "云端服务异常，请稍后重试");
     setLogoutEnabled(true);
+    startCountdown(10, leave);
   } else {
     setText(["77_18"], "打印完成");
     setText(["77_21"], "请尽快取走您的文件");

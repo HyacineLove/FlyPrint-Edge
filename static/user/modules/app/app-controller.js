@@ -82,6 +82,7 @@ export function createAppController({ mountNode }) {
       router,
       queuePrintRequest,
       restartCycle,
+      returnToHome,
       continueToFiles,
       finishWithResult,
     };
@@ -413,7 +414,7 @@ export function createAppController({ mountNode }) {
     const result = { type: type || "success", message: message || "", ...(extra || {}) };
     if (isFaultLockedDoneResult(result)) {
       // Fault locks must retain the device notice but never retain a user's SSO session.
-      void cleanupSessionResources();
+      await cleanupSessionResources();
       clearLocalUserSession();
       setDoneResult(type, message, extra);
       state.sessionPhase = "fault_locked";
@@ -424,6 +425,20 @@ export function createAppController({ mountNode }) {
     setDoneResult(type, message, extra);
     state.sessionPhase = type === "success" ? "completed" : "error";
     await router.go("done");
+  }
+
+  async function returnToHome() {
+    if (restartInFlight) return;
+    restartInFlight = true;
+    try {
+      dismissActiveDialog();
+      await cleanupSessionResources();
+      clearLocalUserSession();
+      state.sessionPhase = "idle";
+      await router.go("login");
+    } finally {
+      restartInFlight = false;
+    }
   }
 
   function finishWithResult(type, message, extra = {}) {

@@ -11,18 +11,19 @@ test("PRP file list renders a refresh action", () => {
   assert.match(html, /<button id="filesExit"[^>]*type="button"[^>]*>退出登录<\/button>/);
 });
 
-test("refresh action reloads the currently displayed page", () => {
+test("refresh action resets the session countdown before reloading the current page", () => {
   assert.equal(typeof prpFiles.createPRPFilesRefreshHandler, "function");
 
-  const loadedPages = [];
+  const events = [];
   const refresh = prpFiles.createPRPFilesRefreshHandler(
     () => 3,
-    (page) => loadedPages.push(page),
+    () => events.push("reset"),
+    (page) => events.push(`load:${page}`),
   );
 
   refresh();
 
-  assert.deepEqual(loadedPages, [3]);
+  assert.deepEqual(events, ["reset", "load:3"]);
 });
 
 test("PRP file page accepts PDF, image and DOCX metadata", () => {

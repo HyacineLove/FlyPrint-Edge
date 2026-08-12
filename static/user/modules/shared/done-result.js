@@ -26,3 +26,13 @@ export function isUnconfirmedDoneResult(result) {
 export function isFaultLockedDoneResult(result) {
   return isPrinterFaultDoneResult(result) || isUnconfirmedDoneResult(result);
 }
+
+export function canContinueToFilesAfterDone({ result, sessionId, sourceOrigin } = {}) {
+  if (!sessionId || sourceOrigin !== "prp" || isFaultLockedDoneResult(result)) return false;
+  return result?.type === "success" || result?.type === "error";
+}
+
+export function faultAvailabilityMessage(availability) {
+  const message = String(availability?.message || "").trim();
+  return message || "打印机仍需处理，请检查后重试";
+}

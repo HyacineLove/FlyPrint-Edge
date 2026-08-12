@@ -421,16 +421,37 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("isUnconfirmedResult", done_view)
         self.assertNotIn("setCountdownAccessoryVisible", done_view)
 
+    def test_fault_lock_waits_for_local_session_cleanup_without_unlocking_the_fault_page(self):
+        controller = read_source(BASE_DIR / "modules/app/app-controller.js")
+
+        self.assertRegex(
+            controller,
+            r"if\s*\(isFaultLockedDoneResult\(result\)\)\s*\{[\s\S]*?await cleanupSessionResources\(\);\s*clearLocalUserSession\(\);[\s\S]*?state\.sessionPhase\s*=\s*\"fault_locked\"[\s\S]*?router\.go\(\"done\"\)",
+        )
+        self.assertNotIn("void cleanupSessionResources();", controller)
+
     def test_successful_prp_done_view_offers_continue_file_selection(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        done_result = read_source(BASE_DIR / "modules/shared/done-result.js")
         controller = read_source(BASE_DIR / "modules/app/app-controller.js")
 
         self.assertIn('id="115_40"', done_view)
         self.assertIn("continueToFiles", done_view)
-        self.assertIn("source_origin === \"prp\"", done_view)
+        self.assertIn("canContinueToFilesAfterDone", done_view)
+        self.assertIn("sourceOrigin !== \"prp\"", done_result)
         self.assertIn("async function continueToFiles", controller)
         self.assertIn("api.prpSelection", controller)
         self.assertIn('await router.go("files")', controller)
+
+    def test_normal_prp_failure_reuses_done_actions_but_fault_home_return_needs_no_logout_confirmation(self):
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+
+        self.assertRegex(
+            done_view,
+            r'if\s*\(result\.type\s*===\s*"error"\)\s*\{[\s\S]*?startCountdown\(10,\s*leave\)',
+        )
+        self.assertIn('logoutLabel.textContent = "返回首页"', done_view)
+        self.assertIn('on("115_43", () => void returnToHome?.())', done_view)
 
     def test_app_controller_failed_snapshot_uses_snapshot_error_fields(self):
         controller = read_source(BASE_DIR / "modules/app/app-controller.js")
