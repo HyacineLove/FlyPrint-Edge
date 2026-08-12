@@ -28,6 +28,7 @@ class InteractiveSessionManager:
                 "entry_type": entry_type,
                 "qr_generation": self._qr_generation,
                 "site_portal_code": None,
+                "site_portal_display_name": None,
                 "cloud_user_id": None,
                 "external_user_id": None,
                 "display_name": None,
@@ -180,6 +181,7 @@ class InteractiveSessionManager:
                 if not value:
                     return False
                 self._active_session[key] = value
+            self._active_session["site_portal_display_name"] = str(data.get("site_portal_display_name") or "").strip()
             self._active_session["entry_type"] = "site_portal"
             self._active_session["state"] = "identity_ready"
             self._active_session["updated_at"] = time.time()
@@ -510,6 +512,7 @@ class InteractiveSessionManager:
                 snapshot["initial_print_options"] = deepcopy(self._active_session["initial_print_options"])
             if self._active_session.get("site_portal_code"):
                 snapshot["site_portal_code"] = self._active_session["site_portal_code"]
+                snapshot["site_portal_display_name"] = self._active_session["site_portal_display_name"]
                 snapshot["cloud_user_id"] = self._active_session["cloud_user_id"]
                 snapshot["external_user_id"] = self._active_session["external_user_id"]
                 snapshot["display_name"] = self._active_session["display_name"]

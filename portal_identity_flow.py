@@ -1,8 +1,12 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from portal_session import _parse_utc_timestamp
 from site_portal_client import SitePortalProtocolError
+
+
+logger = logging.getLogger(__name__)
 
 
 class PortalIdentityFlow:
@@ -34,6 +38,13 @@ class PortalIdentityFlow:
         ready_expires_at = _parse_utc_timestamp(payload.get("expires_at"))
         if not ready_expires_at or ready_expires_at <= datetime.now(timezone.utc):
             return None
+        portal_display_name = str(payload.get("site_portal_display_name") or "").strip()
+        if not portal_display_name:
+            portal_display_name = str(payload["site_portal_code"])
+            logger.warning(
+                "Cloud portal_session_ready missing site_portal_display_name; using site_portal_code=%s until Cloud is upgraded",
+                portal_display_name,
+            )
 
         claimed = self._client.redeem(
             str(payload["claim_base_url"]),
@@ -44,6 +55,7 @@ class PortalIdentityFlow:
         )
         bound_payload = {
             **claimed,
+            "site_portal_display_name": portal_display_name,
             "terminal_session_id": session_id,
             "cloud_user_id": str(payload["cloud_user_id"]),
         }
@@ -52,6 +64,7 @@ class PortalIdentityFlow:
         if not self._interactive_sessions.bind_portal_identity({
             "terminal_session_id": session_id,
             "site_portal_code": bound_payload["site_portal_code"],
+            "site_portal_display_name": bound_payload["site_portal_display_name"],
             "cloud_user_id": bound_payload["cloud_user_id"],
             "external_user_id": bound_payload["external_user_id"],
             "display_name": bound_payload["display_name"],

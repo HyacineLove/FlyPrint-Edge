@@ -54,6 +54,23 @@ class SitePortalClientTests(unittest.TestCase):
         self.assertEqual("https://portal.example.test/api/claims/redeem", url)
         self.assertEqual("claim-code-1", options["json"]["claim_code"])
         self.assertEqual(3, options["timeout"])
+        self.assertFalse(options["allow_redirects"])
+
+    def test_redeem_never_follows_a_claim_redirect(self):
+        session = FakeSession(FakeResponse(status_code=307))
+        client = SitePortalClient(session=session)
+
+        with self.assertRaises(SitePortalProtocolError):
+            client.redeem(
+                "http://portal.example.test",
+                "claim-code-1",
+                "official",
+                "edge-1",
+                "session-1",
+            )
+
+        self.assertEqual(1, len(session.calls))
+        self.assertFalse(session.calls[0][1]["allow_redirects"])
 
     def test_redeem_maps_network_error_to_protocol_error(self):
         client = SitePortalClient(session=FailingSession())

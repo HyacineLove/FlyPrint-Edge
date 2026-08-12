@@ -12,6 +12,11 @@ import {
   renderCommonText,
   setQrCenterVisible,
 } from "../shared/runtime.js";
+import { confirmManualQrRefresh } from "../shared/logout.js";
+
+export function shouldConfirmManualQrRefresh({ terminalOccupied, loginQrRefreshing }) {
+  return Boolean(terminalOccupied) && !loginQrRefreshing;
+}
 
 export function renderLoginView() {
   return `
@@ -170,8 +175,11 @@ export function bindLoginViewEvents({ appState }) {
   clearBg("3_37");
   setQrCenterVisible(false);
 
-  on("3_28", () => {
+  on("3_28", async () => {
     if (loginQrRefreshing) return;
+    if (shouldConfirmManualQrRefresh({ terminalOccupied, loginQrRefreshing })) {
+      if (!(await confirmManualQrRefresh())) return;
+    }
     void refreshQrCode();
   });
 

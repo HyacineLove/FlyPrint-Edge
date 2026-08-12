@@ -43,6 +43,9 @@ class SitePortalClient:
                 },
                 verify=self.verify_ssl,
                 timeout=self._timeout,
+                # Claim code is a one-time bearer proof.  A 307/308 redirect
+                # would replay the complete POST body to another origin.
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             raise SitePortalProtocolError("Site Portal 领取请求失败") from exc

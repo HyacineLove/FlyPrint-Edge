@@ -246,6 +246,40 @@ span {
   box-shadow: 0 24px 64px rgba(48, 56, 112, 0.28);
 }
 
+.edge-dialog--notice {
+  width: min(540px, 100%);
+  padding-bottom: 46px;
+  text-align: center;
+}
+
+.edge-dialog--notice p {
+  margin-bottom: 0;
+}
+
+.edge-session-identity {
+  position: fixed;
+  top: 36px;
+  left: 42px;
+  z-index: 50;
+  max-width: 500px;
+  padding: 14px 20px;
+  overflow: hidden;
+  border: 1px solid rgba(111, 123, 202, 0.2);
+  border-radius: 16px;
+  color: #4d5884;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 24px rgba(68, 79, 144, 0.1);
+  font: 700 24px/1.35 var(--ui-font-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edge-session-identity[data-logged-in="false"] {
+  color: #7c849e;
+  font-family: var(--ui-font-regular);
+  font-weight: 400;
+}
+
 .edge-dialog h2 {
   margin: 0;
   color: #25305b;

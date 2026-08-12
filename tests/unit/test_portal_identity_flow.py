@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from unittest.mock import patch
 
@@ -44,6 +45,7 @@ class PortalIdentityFlowTests(unittest.TestCase):
     def ready_message(self, session_id=None):
         return {
             "site_portal_code": "official",
+            "site_portal_display_name": "\u5b98\u65b9\u6253\u5370\u670d\u52a1",
             "claim_base_url": "https://portal.example.test",
             "claim_code": "claim-code-1",
             "terminal_session_id": session_id or self.session["session_id"],
@@ -63,6 +65,7 @@ class PortalIdentityFlowTests(unittest.TestCase):
 
         self.assertEqual(1, len(self.client.calls))
         self.assertEqual("external-user-1", result["external_user_id"])
+        self.assertEqual("\u5b98\u65b9\u6253\u5370\u670d\u52a1", result["site_portal_display_name"])
         self.assertEqual("identity_ready", self.interactive.build_snapshot()["state"])
         self.assertNotIn("access_token", result)
         self.assertNotIn("private-token", str(result))
@@ -70,6 +73,15 @@ class PortalIdentityFlowTests(unittest.TestCase):
             "private-token",
             self.portal_sessions.get_access_context(self.session["session_id"])["access_token"],
         )
+
+    def test_ready_message_without_cloud_display_name_uses_portal_code(self):
+        message = self.ready_message()
+        del message["site_portal_display_name"]
+
+        result = self.flow.handle_ready(message, "edge-1")
+
+        self.assertEqual("official", result["site_portal_display_name"])
+        self.assertEqual(1, len(self.client.calls))
 
     def test_main_replaces_claim_message_with_public_snapshot(self):
         class FakeFlow:
@@ -79,6 +91,7 @@ class PortalIdentityFlowTests(unittest.TestCase):
                 return {
                     "active": True,
                     "site_portal_code": "official",
+                    "site_portal_display_name": "\u5b98\u65b9\u6253\u5370\u670d\u52a1",
                     "external_user_id": "external-user-1",
                     "display_name": "张老师",
                 }
@@ -93,8 +106,35 @@ class PortalIdentityFlowTests(unittest.TestCase):
 
         self.assertEqual("portal_session_ready", result["type"])
         self.assertEqual("external-user-1", result["data"]["external_user_id"])
+        self.assertEqual("\u5b98\u65b9\u6253\u5370\u670d\u52a1", result["data"]["site_portal_display_name"])
         self.assertNotIn("claim_code", result["data"])
         self.assertEqual("edge-1", flow.node_id)
+
+    def test_main_announces_claiming_before_redeeming_login_result(self):
+        class FakeFlow:
+            def handle_ready(self, payload, node_id):
+                return {
+                    "active": True,
+                    "terminal_session_id": payload["terminal_session_id"],
+                    "site_portal_code": "official",
+                    "site_portal_display_name": "官方打印服务",
+                    "external_user_id": "external-user-1",
+                    "display_name": "张老师",
+                }
+
+        queue = asyncio.Queue()
+        with patch.object(main, "portal_identity_flow", FakeFlow(), create=True), \
+             patch.object(main, "node_id", "edge-1"), \
+             patch.object(main, "main_loop", None), \
+             patch.object(main, "sse_clients", [queue]), \
+             patch.object(main.interactive_session_manager, "get_active_session", return_value={"session_id": self.session["session_id"]}):
+            main.handle_cloud_message({"type": "portal_session_ready", "data": self.ready_message()})
+
+        claiming = queue.get_nowait()
+        ready = queue.get_nowait()
+        self.assertEqual("portal_session_claiming", claiming["type"])
+        self.assertEqual({"terminal_session_id": self.session["session_id"]}, claiming["data"])
+        self.assertEqual("portal_session_ready", ready["type"])
 
 
 if __name__ == "__main__":

@@ -391,9 +391,41 @@ def bind_interactive_cloud_job(file_url: Optional[str], job_id: Optional[str], c
         return None
     return bound
 
+
+def _push_sse_message(message: Dict[str, Any]) -> None:
+    """Schedule a safe, already-sanitized message for each active user page."""
+    if not sse_clients:
+        return
+
+    def push_to_queues():
+        for queue in list(sse_clients):
+            _enqueue_sse_latest(queue, message)
+
+    if main_loop:
+        main_loop.call_soon_threadsafe(push_to_queues)
+    else:
+        push_to_queues()
+
+
+def _announce_portal_session_claiming(message: Dict[str, Any]) -> None:
+    """Show progress before the potentially slow Site Portal Claim exchange."""
+    payload = message.get("data") if isinstance(message, dict) else None
+    if not isinstance(payload, dict):
+        return
+    session_id = str(payload.get("terminal_session_id") or "").strip()
+    active = interactive_session_manager.get_active_session() or {}
+    if not session_id or active.get("session_id") != session_id:
+        return
+    _push_sse_message({
+        "type": "portal_session_claiming",
+        "data": {"terminal_session_id": session_id},
+    })
+
 def handle_cloud_message(data: Dict[str, Any]):
     """处理云端消息并推送到所有SSE客户端"""
     try:
+        if data.get("type") == "portal_session_ready":
+            _announce_portal_session_claiming(data)
         enriched_message = _enrich_message_with_session(data)
         if enriched_message is None:
             return
@@ -408,14 +440,7 @@ def handle_cloud_message(data: Dict[str, Any]):
         if client_count == 0:
             return
 
-        def push_to_queues():
-            for q in sse_clients:
-                _enqueue_sse_latest(q, enriched_message)
-
-        if main_loop:
-            main_loop.call_soon_threadsafe(push_to_queues)
-        else:
-            push_to_queues()
+        _push_sse_message(enriched_message)
             
     except Exception as e:
         logger.error(f" 推送消息到SSE队列失败: {e}")

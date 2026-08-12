@@ -19,6 +19,7 @@ import {
 import { api, getJson, postJson } from "../shared/api.js";
 import { clearPendingPrintRequest, currentSessionId, saveSessionState, setDoneResult, setOpsContacts, setPendingPrintRequest } from "../shared/session-state.js";
 import { applyIdentityReady } from "./identity-session.js";
+import { dismissActiveDialog, showLogoutCompleted } from "../shared/logout.js";
 
 const viewRegistry = {
   login: { render: renderLoginView, bind: bindLoginViewEvents },
@@ -39,10 +40,25 @@ export function createAppController({ mountNode }) {
     const definition = viewRegistry[state.currentView] || viewRegistry.login;
     currentViewApi?.destroy?.();
     mountNode.innerHTML = definition.render(state);
+    mountNode.append(renderSessionIdentity(state));
     mountNode.dataset.view = state.currentView;
     renderCommonText(state.currentView);
     currentViewApi = definition.bind(createViewContext()) || null;
   };
+
+  function renderSessionIdentity(appState) {
+    const identity = appState.session?.identity;
+    const indicator = document.createElement("aside");
+    const label = document.createElement("span");
+    const organization = String(identity?.site_portal_display_name || "").trim();
+    const user = String(identity?.display_name || "").trim();
+    indicator.className = "edge-session-identity";
+    indicator.dataset.loggedIn = String(Boolean(organization && user));
+    indicator.setAttribute("aria-live", "polite");
+    label.textContent = organization && user ? `${organization} · ${user}` : "当前未登录";
+    indicator.append(label);
+    return indicator;
+  }
 
   const router = createRouter({ state, renderView: async () => render() });
 
@@ -121,6 +137,15 @@ export function createAppController({ mountNode }) {
         currentViewApi?.setTerminalOccupied?.(true, {
           expiresAt: data?.expires_at || null,
           message: "终端使用中\n请稍候或点击刷新",
+        });
+      }
+      return;
+    }
+
+    if (type === "portal_session_claiming") {
+      if (state.currentView === "login") {
+        currentViewApi?.setTerminalOccupied?.(true, {
+          message: "正在领取登录结果，请稍候",
         });
       }
       return;
@@ -352,10 +377,12 @@ export function createAppController({ mountNode }) {
     }
     restartInFlight = true;
     try {
+      dismissActiveDialog();
       await cleanupSessionResources();
       clearLocalUserSession();
       state.sessionPhase = "idle";
       await router.go("login");
+      showLogoutCompleted();
     } finally {
       restartInFlight = false;
     }

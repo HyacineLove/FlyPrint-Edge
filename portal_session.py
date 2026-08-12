@@ -74,6 +74,7 @@ class PortalSessionManager:
             self._active = {
                 "terminal_session_id": active_terminal_session_id,
                 "site_portal_code": str(payload["site_portal_code"]),
+                "site_portal_display_name": str(payload.get("site_portal_display_name") or "").strip(),
                 "cloud_user_id": str(payload["cloud_user_id"]),
                 "external_user_id": str(payload["external_user_id"]),
                 "display_name": str(payload["display_name"]),
@@ -94,6 +95,7 @@ class PortalSessionManager:
             return {
                 "active": True, "terminal_session_id": self._active["terminal_session_id"],
                 "site_portal_code": self._active["site_portal_code"],
+                "site_portal_display_name": self._active["site_portal_display_name"],
                 "cloud_user_id": self._active["cloud_user_id"],
                 "external_user_id": self._active["external_user_id"],
                 "display_name": self._active["display_name"],
