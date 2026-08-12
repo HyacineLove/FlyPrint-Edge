@@ -379,6 +379,16 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   background: linear-gradient(135deg, #b9bfce, #b0acd0);
 }
 
+.done-printer-refresh.fault-action {
+  left: 107px;
+  top: 1700px;
+}
+
+.Pixso-group-115_43.fault-session-exited {
+  left: 556px;
+  top: 1700px;
+}
+
 .Pixso-group-115_43.single-action.ui-action-button {
   background: linear-gradient(135deg, var(--ui-primary-start), var(--ui-primary-end));
 }

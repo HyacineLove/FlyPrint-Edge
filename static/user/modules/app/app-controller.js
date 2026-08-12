@@ -20,6 +20,7 @@ import { api, getJson, postJson } from "../shared/api.js";
 import { clearPendingPrintRequest, currentSessionId, saveSessionState, setDoneResult, setOpsContacts, setPendingPrintRequest } from "../shared/session-state.js";
 import { applyIdentityReady } from "./identity-session.js";
 import { dismissActiveDialog, showLogoutCompleted } from "../shared/logout.js";
+import { isFaultLockedDoneResult } from "../shared/done-result.js";
 
 const viewRegistry = {
   login: { render: renderLoginView, bind: bindLoginViewEvents },
@@ -353,7 +354,7 @@ export function createAppController({ mountNode }) {
     }
 
     if (["failed", "canceled", "cancelled", "unconfirmed"].includes(phase)) {
-      setDoneResult(
+      await presentDoneResult(
         "error",
         mapPrintErrorMessage(snapshot.error_code, snapshot.error_message || "打印失败，请联系管理员"),
         {
@@ -361,7 +362,6 @@ export function createAppController({ mountNode }) {
           printer_fault: snapshot.printer_fault || null,
         },
       );
-      await router.go("done");
       return;
     }
 
@@ -409,10 +409,25 @@ export function createAppController({ mountNode }) {
     }
   }
 
-  function finishWithResult(type, message, extra = {}) {
+  async function presentDoneResult(type, message, extra = {}) {
+    const result = { type: type || "success", message: message || "", ...(extra || {}) };
+    if (isFaultLockedDoneResult(result)) {
+      // Fault locks must retain the device notice but never retain a user's SSO session.
+      void cleanupSessionResources();
+      clearLocalUserSession();
+      setDoneResult(type, message, extra);
+      state.sessionPhase = "fault_locked";
+      await router.go("done");
+      showLogoutCompleted();
+      return;
+    }
     setDoneResult(type, message, extra);
     state.sessionPhase = type === "success" ? "completed" : "error";
-    void router.go("done");
+    await router.go("done");
+  }
+
+  function finishWithResult(type, message, extra = {}) {
+    void presentDoneResult(type, message, extra);
   }
 
   return {

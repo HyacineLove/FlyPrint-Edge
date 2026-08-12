@@ -2,6 +2,11 @@ import { on, setText } from "../shared/dom.js";
 import { api, getJson } from "../shared/api.js";
 import { createMainCountdown } from "../shared/countdown.js";
 import { confirmLogout } from "../shared/logout.js";
+import {
+  isFaultLockedDoneResult,
+  isPrinterFaultDoneResult,
+  isUnconfirmedDoneResult,
+} from "../shared/done-result.js";
 
 export function renderDoneView() {
   return `
@@ -41,6 +46,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     appState.session?.file?.source_origin === "prp",
   );
   const logoutButton = document.getElementById("115_43");
+  const logoutLabel = logoutButton?.querySelector(".Pixso-paragraph-115_45");
   logoutButton?.classList.add("ui-action-button", "ui-action-button--secondary");
   if (logoutButton) logoutButton.classList.toggle("single-action", !canContinueToFiles);
   const continueButton = document.getElementById("115_40");
@@ -61,28 +67,12 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     },
   });
   const startCountdown = (seconds, action) => mainCountdown.start(seconds, action);
-  const printerFaultCodes = new Set([
-    "printer_fault",
-    "printer_out_of_paper",
-    "printer_out_of_toner",
-    "printer_jammed",
-    "printer_cover_open",
-    "printer_offline",
-    "printer_user_intervention",
-  ]);
-  const unconfirmedCodes = new Set([
-    "result_unconfirmed",
-    "ipp_submission_unconfirmed",
-    "ipp_job_query_failed",
-    "ipp_cancel_failed",
-  ]);
-
   function isPrinterFaultResult() {
-    return result.type === "error" && printerFaultCodes.has(result.error_code);
+    return isPrinterFaultDoneResult(result);
   }
 
   function isUnconfirmedResult() {
-    return result.type === "error" && unconfirmedCodes.has(result.error_code);
+    return isUnconfirmedDoneResult(result);
   }
 
   function setLogoutEnabled(enabled) {
@@ -129,6 +119,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
       const availability = await getJson(api.printerAvailability);
       if (!availability?.faulted) {
         setText(["77_21"], "打印机已恢复，可退出登录后继续使用");
+        if (isFaultLockedDoneResult(result) && logoutLabel) logoutLabel.textContent = "返回首页";
         setLogoutEnabled(true);
         setRefreshEnabled(false);
         doneLoading = false;
@@ -166,11 +157,14 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles }) 
     }
   }
 
-  if (isPrinterFaultResult() || isUnconfirmedResult()) {
+  if (isFaultLockedDoneResult(result)) {
     const unconfirmed = isUnconfirmedResult();
     setText(["77_18"], unconfirmed ? "结果待确认" : "设备维护中");
     setText(["77_21"], result.message || (unconfirmed ? "请勿重复提交，请联系工作人员。" : "打印机故障，请联系管理员处理"));
     if (refreshButton) refreshButton.hidden = false;
+    refreshButton?.classList.add("fault-action");
+    logoutButton?.classList.add("fault-session-exited");
+    if (logoutLabel) logoutLabel.textContent = "已退出";
     setLogoutEnabled(false);
     setRefreshEnabled(true);
     startCountdown(10, checkPrinterAvailability);

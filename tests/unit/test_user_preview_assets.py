@@ -200,6 +200,7 @@ class UserPreviewAssetTests(unittest.TestCase):
 
     def test_printer_fault_handling_stays_on_result_page(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+        done_result = read_source(BASE_DIR / "modules/shared/done-result.js")
         login_view = read_source(BASE_DIR / "modules/views/login-view.js")
         runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
         api = read_source(BASE_DIR / "modules/shared/api.js")
@@ -209,8 +210,8 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("printer_fault", runtime)
         self.assertNotIn("media-needed-error", runtime)
         self.assertIn("isPrinterFaultResult", done_view)
-        self.assertIn("printer_out_of_paper", done_view)
-        self.assertIn("printer_out_of_toner", done_view)
+        self.assertIn("printer_out_of_paper", done_result)
+        self.assertIn("printer_out_of_toner", done_result)
         self.assertIn("donePrinterRefresh", done_view)
         self.assertIn("checkPrinterAvailability", done_view)
         self.assertNotIn("printerAvailability", login_view)
@@ -318,6 +319,14 @@ class UserPreviewAssetTests(unittest.TestCase):
             preview_css,
             r"\.Pixso-rectangle-97_455,\s*\.done-secondary-action-surface\s*\{",
         )
+        self.assertRegex(
+            done_css,
+            r"\.done-printer-refresh\.fault-action\s*\{[^}]*left:\s*107px[^}]*top:\s*1700px",
+        )
+        self.assertRegex(
+            done_css,
+            r"\.Pixso-group-115_43\.fault-session-exited\s*\{[^}]*left:\s*556px[^}]*top:\s*1700px",
+        )
 
     def test_logout_actions_use_explicit_label_and_confirmation(self):
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
@@ -348,7 +357,7 @@ class UserPreviewAssetTests(unittest.TestCase):
 
         self.assertRegex(
             done_view,
-            r"if\s*\(\s*isPrinterFaultResult\(\)\s*\|\|\s*isUnconfirmedResult\(\)\s*\)\s*\{[\s\S]*?startCountdown\(10,\s*checkPrinterAvailability\)",
+            r"if\s*\(\s*isFaultLockedDoneResult\(result\)\s*\)\s*\{[\s\S]*?startCountdown\(10,\s*checkPrinterAvailability\)",
             "printer fault result should use the main countdown to recheck",
         )
         self.assertIn("打印机已恢复", done_view)
@@ -644,10 +653,7 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("let loading = false", files_view)
         self.assertIn("previewFailureMode", preview_view)
         self.assertIn("let doneLoading = false", done_view)
-        self.assertRegex(
-            done_view,
-            r"isPrinterFaultResult\(\)\s*\|\|\s*isUnconfirmedResult\(\)",
-        )
+        self.assertIn("isFaultLockedDoneResult(result)", done_view)
 
     def test_prp_files_page_size_fits_the_terminal_canvas(self):
         files_view = read_source(BASE_DIR / "modules/app/prp-files.js")
