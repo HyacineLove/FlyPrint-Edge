@@ -34,9 +34,9 @@ class SitePortalClientTests(unittest.TestCase):
             "site_portal_code": "official",
             "external_user_id": "external-user-1",
             "display_name": "张老师",
-            "providers": [{"provider_id": "prp-a", "display_name": "文件库 A", "prp_base_url": "https://prp.example.test"}],
-            "access_token": "private-token",
-            "access_token_expires_at": "2099-07-30T12:05:00Z",
+            "providers": [{"provider_id": "prp-a", "display_name": "文件库 A"}],
+            "file_session_token": "portal-file-session",
+            "file_session_expires_at": "2099-07-30T12:05:00Z",
         }))
         client = SitePortalClient(session=session, timeout=3)
 
@@ -87,6 +87,19 @@ class SitePortalClientTests(unittest.TestCase):
                 "https://portal.example.test", "claim-code-1",
                 "official", "edge-1", "session-1",
             )
+
+    def test_redeem_rejects_sso_token_or_provider_url(self):
+        client = SitePortalClient(session=FakeSession(FakeResponse(payload={
+            "site_portal_code": "official",
+            "external_user_id": "external-user-1",
+            "display_name": "张老师",
+            "providers": [{"provider_id": "prp-a", "display_name": "文件库 A", "prp_base_url": "https://prp.example.test"}],
+            "file_session_token": "portal-file-session",
+            "file_session_expires_at": "2099-07-30T12:05:00Z",
+            "access_token": "sso-token",
+        })))
+        with self.assertRaises(SitePortalProtocolError):
+            client.redeem("https://portal.example.test", "claim-code-1", "official", "edge-1", "session-1")
 
     def test_redeem_rejects_non_http_claim_base_without_request(self):
         session = FakeSession(FakeResponse())

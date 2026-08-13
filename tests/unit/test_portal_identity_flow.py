@@ -24,9 +24,9 @@ class FakeSitePortalClient:
             "site_portal_code": site_portal_code,
             "external_user_id": "external-user-1",
             "display_name": "张老师",
-            "prp_base_url": "https://prp.example.test",
-            "access_token": "private-token",
-            "access_token_expires_at": "2099-07-30T12:05:00Z",
+            "providers": [{"provider_id": "prp-a", "display_name": "文件库 A"}],
+            "file_session_token": "portal-file-session",
+            "file_session_expires_at": "2099-07-30T12:05:00Z",
         }
 
 
@@ -68,10 +68,15 @@ class PortalIdentityFlowTests(unittest.TestCase):
         self.assertEqual("\u5b98\u65b9\u6253\u5370\u670d\u52a1", result["site_portal_display_name"])
         self.assertEqual("identity_ready", self.interactive.build_snapshot()["state"])
         self.assertNotIn("access_token", result)
-        self.assertNotIn("private-token", str(result))
+        self.assertNotIn("file_session_token", result)
+        self.assertNotIn("portal-file-session", str(result))
         self.assertEqual(
-            "private-token",
-            self.portal_sessions.get_access_context(self.session["session_id"])["access_token"],
+            "portal-file-session",
+            self.portal_sessions.get_access_context(self.session["session_id"])["file_session_token"],
+        )
+        self.assertEqual(
+            "https://portal.example.test",
+            self.portal_sessions.get_access_context(self.session["session_id"])["portal_base_url"],
         )
 
     def test_ready_message_without_cloud_display_name_uses_portal_code(self):

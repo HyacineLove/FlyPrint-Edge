@@ -58,6 +58,7 @@ class PortalIdentityFlow:
             "site_portal_display_name": portal_display_name,
             "terminal_session_id": session_id,
             "cloud_user_id": str(payload["cloud_user_id"]),
+            "claim_base_url": str(payload["claim_base_url"]),
         }
         if not self._portal_sessions.bind(session_id, bound_payload):
             raise SitePortalProtocolError("领取结果无法绑定当前终端会话")

@@ -60,8 +60,8 @@ class SitePortalClient:
             "external_user_id",
             "display_name",
             "providers",
-            "access_token",
-            "access_token_expires_at",
+            "file_session_token",
+            "file_session_expires_at",
         }
         if not isinstance(payload, dict) or not required.issubset(payload):
             raise SitePortalProtocolError("Site Portal 领取响应不完整")
@@ -76,13 +76,15 @@ class SitePortalClient:
                 raise SitePortalProtocolError("PRP Provider 列表无效")
             provider_id = str(provider.get("provider_id") or "").strip()
             display_name = str(provider.get("display_name") or "").strip()
-            prp = urlparse(str(provider.get("prp_base_url") or ""))
-            if (not provider_id or provider_id in seen or not display_name or
-                    prp.scheme not in {"http", "https"} or not prp.netloc or prp.username or prp.password):
-                raise SitePortalProtocolError("PRP Provider 地址无效")
+            if not provider_id or provider_id in seen or not display_name:
+                raise SitePortalProtocolError("PRP Provider 列表无效")
+            if provider.get("prp_base_url") or provider.get("file_base_url"):
+                raise SitePortalProtocolError("PRP Provider 地址不得下发给 Edge")
             seen.add(provider_id)
-        if not _parse_utc_timestamp(payload.get("access_token_expires_at")):
-            raise SitePortalProtocolError("PRP 访问凭证有效期无效")
+        if not _parse_utc_timestamp(payload.get("file_session_expires_at")):
+            raise SitePortalProtocolError("文件会话有效期无效")
         if not all(str(payload.get(field) or "").strip() for field in required - {"providers"}):
             raise SitePortalProtocolError("Site Portal 领取响应包含空字段")
+        if payload.get("access_token"):
+            raise SitePortalProtocolError("领取响应不得包含 SSO 访问令牌")
         return dict(payload)

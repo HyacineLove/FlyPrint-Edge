@@ -47,7 +47,7 @@ class _PRPHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         type(self).seen_authorization = self.headers.get("Authorization", "")
         type(self).seen_query = parsed.query
-        if parsed.path == "/api/v1/files":
+        if parsed.path == "/api/providers/prp-a/files":
             if type(self).mode == "bad_pagination":
                 body = {"items": [], "page": "1", "page_size": 20, "total": 0}
             else:
@@ -67,7 +67,7 @@ class _PRPHandler(BaseHTTPRequestHandler):
                 }
             self._json(body)
             return
-        if parsed.path == "/api/v1/files/file-1/content":
+        if parsed.path == "/api/providers/prp-a/files/file-1/content":
             name, media_type, content = type(self)._file_response()
             declared_length = len(content) + (1 if type(self).mode == "wrong_length" else 0)
             declared_hash = "0" * 64 if type(self).mode == "wrong_hash" else hashlib.sha256(content).hexdigest()
@@ -129,13 +129,17 @@ class PRPClientTests(unittest.TestCase):
         _PRPHandler.seen_authorization = ""
         _PRPHandler.seen_query = ""
         self.client = PRPClient()
-        self.access = {"prp_base_url": self.base_url, "access_token": "private-prp-token"}
+        self.access = {
+            "portal_base_url": self.base_url,
+            "file_session_token": "portal-file-session",
+            "provider_id": "prp-a",
+        }
 
     def test_list_uses_authorization_header_and_never_query_token(self):
         result = self.client.list_files(self.access, 1, 20)
         self.assertEqual(1, result["total"])
-        self.assertEqual("Bearer private-prp-token", _PRPHandler.seen_authorization)
-        self.assertNotIn("private-prp-token", _PRPHandler.seen_query)
+        self.assertEqual("Bearer portal-file-session", _PRPHandler.seen_authorization)
+        self.assertNotIn("portal-file-session", _PRPHandler.seen_query)
 
     def test_list_rejects_invalid_pagination_shape(self):
         _PRPHandler.mode = "bad_pagination"
@@ -235,7 +239,7 @@ class PRPClientTests(unittest.TestCase):
         ):
             with self.subTest(base_url=base_url), self.assertRaises(PRPClientError):
                 self.client.list_files(
-                    {"prp_base_url": base_url, "access_token": "private-prp-token"}, 1, 20
+                    {"portal_base_url": base_url, "file_session_token": "portal-file-session", "provider_id": "prp-a"}, 1, 20
                 )
 
     def _assert_failed_download_removes_partial(self, expected_code):

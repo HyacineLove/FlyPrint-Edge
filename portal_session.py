@@ -21,12 +21,12 @@ def _parse_utc_timestamp(value: Any) -> Optional[datetime]:
 
 
 class PortalSessionManager:
-    """Process-memory holder for one SSO token and its Provider directory."""
+    """Process-memory holder for one Site Portal file session and Provider directory."""
 
     _required_fields = {
         "terminal_session_id", "site_portal_code", "cloud_user_id",
-        "external_user_id", "display_name", "providers", "access_token",
-        "access_token_expires_at",
+        "external_user_id", "display_name", "providers", "claim_base_url",
+        "file_session_token", "file_session_expires_at",
     }
 
     def __init__(self):
@@ -43,13 +43,11 @@ class PortalSessionManager:
                 return None
             provider_id = str(item.get("provider_id") or "").strip()
             display_name = str(item.get("display_name") or "").strip()
-            base_url = str(item.get("prp_base_url") or "").strip().rstrip("/")
-            parsed = urlparse(base_url)
-            if (not provider_id or not display_name or provider_id in result or
-                    parsed.scheme not in {"http", "https"} or not parsed.netloc or
-                    parsed.username or parsed.password):
+            if not provider_id or not display_name or provider_id in result:
                 return None
-            result[provider_id] = {"provider_id": provider_id, "display_name": display_name, "prp_base_url": base_url}
+            if item.get("prp_base_url") or item.get("file_base_url"):
+                return None
+            result[provider_id] = {"provider_id": provider_id, "display_name": display_name}
         return result
 
     def bind(self, active_terminal_session_id: str, payload: Dict[str, Any]) -> bool:
@@ -60,14 +58,22 @@ class PortalSessionManager:
         required = self._required_fields - {"providers"}
         if not required.issubset(payload) or not all(str(payload.get(field) or "").strip() for field in required):
             return False
-        providers = self._providers(payload.get("providers"))
-        # Legacy in-process test callers may still create a session from a
-        # scalar context. No Site Portal response or Edge HTTP route exposes it.
-        if not providers and str(payload.get("prp_base_url") or "").strip():
-            providers = self._providers([{"provider_id": "default", "display_name": "默认文件库", "prp_base_url": payload["prp_base_url"]}])
-        expires_at = _parse_utc_timestamp(payload.get("access_token_expires_at"))
-        if not providers or not expires_at or expires_at <= datetime.now(timezone.utc):
+        if payload.get("access_token"):
             return False
+        providers = self._providers(payload.get("providers"))
+        expires_at = _parse_utc_timestamp(payload.get("file_session_expires_at"))
+        parsed = urlparse(str(payload.get("claim_base_url") or "").strip())
+        if (
+            not providers
+            or not expires_at
+            or expires_at <= datetime.now(timezone.utc)
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+        ):
+            return False
+        claim_base_url = str(payload["claim_base_url"]).strip().rstrip("/")
         with self._lock:
             if self._active and self._active.get("terminal_session_id") != active_terminal_session_id:
                 return False
@@ -79,8 +85,9 @@ class PortalSessionManager:
                 "external_user_id": str(payload["external_user_id"]),
                 "display_name": str(payload["display_name"]),
                 "providers": providers,
-                "access_token": str(payload["access_token"]),
-                "access_token_expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+                "claim_base_url": claim_base_url,
+                "file_session_token": str(payload["file_session_token"]),
+                "file_session_expires_at": expires_at.isoformat().replace("+00:00", "Z"),
             }
             return True
 
@@ -88,7 +95,7 @@ class PortalSessionManager:
         with self._lock:
             if not self._active:
                 return {"active": False}
-            expires_at = _parse_utc_timestamp(self._active.get("access_token_expires_at"))
+            expires_at = _parse_utc_timestamp(self._active.get("file_session_expires_at"))
             if not expires_at or expires_at <= datetime.now(timezone.utc):
                 self._active = None
                 return {"active": False}
@@ -109,7 +116,7 @@ class PortalSessionManager:
         with self._lock:
             if not self._active or self._active.get("terminal_session_id") != terminal_session_id:
                 return None
-            expires_at = _parse_utc_timestamp(self._active.get("access_token_expires_at"))
+            expires_at = _parse_utc_timestamp(self._active.get("file_session_expires_at"))
             if not expires_at or expires_at <= datetime.now(timezone.utc):
                 self._active = None
                 return None
@@ -117,7 +124,11 @@ class PortalSessionManager:
             selected = providers.get(provider_id) if provider_id else next(iter(providers.values()), None)
             if not selected:
                 return None
-            return {"prp_base_url": selected["prp_base_url"], "access_token": self._active["access_token"], "provider_id": selected["provider_id"]}
+            return {
+                "portal_base_url": self._active["claim_base_url"],
+                "file_session_token": self._active["file_session_token"],
+                "provider_id": selected["provider_id"],
+            }
 
     def clear(self, terminal_session_id: Optional[str] = None) -> bool:
         with self._lock:

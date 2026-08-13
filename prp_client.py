@@ -90,12 +90,12 @@ class PRPClient:
             or page_size > 50
         ):
             raise PRPClientError("invalid_pagination")
-        base_url, token = self._access(access_context)
+        base_url, token, provider_id = self._access(access_context)
         started_at = time.monotonic()
         response = None
         try:
             response = self._session.get(
-                base_url + "/api/v1/files",
+                base_url + "/api/providers/" + provider_id + "/files",
                 params={"page": page, "page_size": page_size},
                 headers={"Authorization": "Bearer " + token},
                 timeout=(
@@ -157,13 +157,13 @@ class PRPClient:
         )
         max_download_bytes = min(self._max_download_bytes, edge_limit) if edge_limit else self._max_download_bytes
         size_limit_code = "edge_file_size_exceeded" if edge_limit and edge_limit <= self._max_download_bytes else "file_too_large"
-        base_url, token = self._access(access_context)
+        base_url, token, provider_id = self._access(access_context)
         partial = destination.with_name(destination.name + ".part")
         partial.unlink(missing_ok=True)
         response = None
         try:
             response = self._session.get(
-                base_url + "/api/v1/files/" + file_id + "/content",
+                base_url + "/api/providers/" + provider_id + "/files/" + file_id + "/content",
                 headers={"Authorization": "Bearer " + token},
                 timeout=self._timeout,
                 stream=True,
@@ -226,12 +226,19 @@ class PRPClient:
                 response.close()
 
     @staticmethod
-    def _access(access_context: Dict[str, Any]) -> tuple[str, str]:
+    def _access(access_context: Dict[str, Any]) -> tuple[str, str, str]:
         if not isinstance(access_context, dict):
             raise PRPClientError("portal_session_invalid")
-        raw_base = access_context.get("prp_base_url")
-        token = access_context.get("access_token")
-        if not isinstance(raw_base, str) or not isinstance(token, str) or not token:
+        raw_base = access_context.get("portal_base_url")
+        token = access_context.get("file_session_token")
+        provider_id = access_context.get("provider_id")
+        if (
+            not isinstance(raw_base, str)
+            or not isinstance(token, str)
+            or not token
+            or not isinstance(provider_id, str)
+            or not provider_id
+        ):
             raise PRPClientError("portal_session_invalid")
         parsed = urlsplit(raw_base.strip())
         if (
@@ -242,11 +249,11 @@ class PRPClient:
             or parsed.query
             or parsed.fragment
         ):
-            raise PRPClientError("invalid_prp_base_url")
+            raise PRPClientError("invalid_portal_base_url")
         base_url = urlunsplit(
             (parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", "")
         )
-        return base_url, token
+        return base_url, token, provider_id
 
     @staticmethod
     def _validate_file_list(payload: Any, page: int, page_size: int) -> None:
