@@ -54,12 +54,13 @@ export function mapPRPFileError(error) {
   return messages[code] || String(error?.message || "文件操作失败，请稍后重试");
 }
 
+// 列表 size/sha256 可省略或为 null；有值时才校验。未知体积不在列表阶段拦截。
 export function normalizePRPFilePage(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("文件列表无效");
   const { items, page, page_size: pageSize, total } = payload;
   if (!Array.isArray(items) || !Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50 || !Number.isInteger(total) || total < 0) throw new Error("文件分页无效");
   const normalized = items.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !ITEM_KEYS.has(key)) || typeof item.id !== "string" || !item.id || typeof item.name !== "string" || !item.name || !SUPPORTED_MEDIA_TYPES.has(item.media_type) || !Number.isInteger(item.size) || item.size < 0 || typeof item.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(item.sha256) || Number.isNaN(Date.parse(item.created_at)) || Number.isNaN(Date.parse(item.expires_at)) || (item.last_downloaded_at !== null && Number.isNaN(Date.parse(item.last_downloaded_at)))) throw new Error("文件数据无效");
+    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !ITEM_KEYS.has(key)) || typeof item.id !== "string" || !item.id || typeof item.name !== "string" || !item.name || !SUPPORTED_MEDIA_TYPES.has(item.media_type) || (item.size != null && (!Number.isInteger(item.size) || item.size < 0)) || (item.sha256 != null && item.sha256 !== "" && (typeof item.sha256 !== "string" || !/^[0-9a-fA-F]{64}$/.test(item.sha256))) || Number.isNaN(Date.parse(item.created_at)) || Number.isNaN(Date.parse(item.expires_at)) || (item.last_downloaded_at !== null && Number.isNaN(Date.parse(item.last_downloaded_at)))) throw new Error("文件数据无效");
     return { ...item };
   });
   return { items: normalized, page, page_size: pageSize, total };
@@ -72,6 +73,7 @@ function fileBadge(mediaType) {
 }
 
 export function formatFileSize(size) {
+  if (!Number.isInteger(size) || size < 0) return "";
   if (size < 1024 * 1024) return `${Math.max(1, Math.ceil(size / 1024))} KB`;
   return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
@@ -188,7 +190,11 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       summary.className = "files-item-summary";
       name.textContent = item.name;
       detail.className = "files-item-detail";
-      detail.textContent = blocked ? `${fileBadge(item.media_type)} · ${formatFileSize(item.size)} · 超出本机上限` : `${fileBadge(item.media_type)} · ${formatFileSize(item.size)}`;
+      const sizeText = formatFileSize(item.size);
+      const parts = [fileBadge(item.media_type)];
+      if (sizeText) parts.push(sizeText);
+      if (blocked) parts.push("超出本机上限");
+      detail.textContent = parts.join(" · ");
       arrow.className = "files-item-arrow";
       arrow.setAttribute("aria-hidden", "true");
       arrow.textContent = "›";

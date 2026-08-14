@@ -26,6 +26,7 @@ test("valid portal identity enters identity_ready without storing credentials", 
   assert.deepEqual(appState.session.identity, {
     session_id: "session-1",
     site_portal_code: "official",
+    site_portal_display_name: "official",
     cloud_user_id: "cloud-user-1",
     external_user_id: "external-user-1",
     display_name: "演示用户",

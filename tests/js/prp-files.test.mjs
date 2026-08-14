@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isPortalSessionInvalidError, normalizePRPFilePage } from "../../static/user/modules/app/prp-files.js";
+import {
+  exceedsLocalFileSize,
+  formatFileSize,
+  isPortalSessionInvalidError,
+  normalizePRPFilePage,
+} from "../../static/user/modules/app/prp-files.js";
 
 const item = {
   id: "file-1", name: "sample.pdf", media_type: "application/pdf", size: 12,
@@ -23,6 +28,29 @@ test("rejects credentials, malformed hashes, pagination and missing ids", () => 
   ]) {
     assert.throws(() => normalizePRPFilePage(payload));
   }
+});
+
+test("accepts empty sha256 and a display name without extension", () => {
+  const { size, sha256, ...metadata } = item;
+  const page = normalizePRPFilePage({
+    items: [{ ...metadata, name: "个人简历", sha256: "" }],
+    page: 1, page_size: 20, total: 1,
+  });
+  assert.equal(page.items[0].name, "个人简历");
+});
+
+test("accepts list items that omit or null size and sha256", () => {
+  const { size, sha256, ...metadata } = item;
+  for (const payloadItem of [metadata, { ...metadata, size: null, sha256: null }]) {
+    const page = normalizePRPFilePage({ items: [payloadItem], page: 1, page_size: 20, total: 1 });
+    assert.equal(page.items[0].id, "file-1");
+  }
+});
+
+test("hides unknown list size and skips local size intercept", () => {
+  assert.equal(formatFileSize(undefined), "");
+  assert.equal(formatFileSize(null), "");
+  assert.equal(exceedsLocalFileSize({ name: "a.pdf" }, 1024), false);
 });
 
 test("recognizes an expired portal session so the kiosk can explain the logout", () => {

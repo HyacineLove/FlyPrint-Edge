@@ -52,15 +52,27 @@ class _PRPHandler(BaseHTTPRequestHandler):
                 body = {"items": [], "page": "1", "page_size": 20, "total": 0}
             else:
                 name, media_type, content = type(self)._file_response()
+                item = {
+                    "id": "file-1", "name": name,
+                    "media_type": media_type,
+                    "created_at": "2026-07-30T12:00:00Z",
+                    "expires_at": "2026-08-06T12:00:00Z",
+                    "last_downloaded_at": None,
+                }
+                if type(self).mode == "null_size_hash":
+                    item["size"] = None
+                    item["sha256"] = None
+                elif type(self).mode == "empty_sha256":
+                    item["size"] = len(content)
+                    item["sha256"] = ""
+                elif type(self).mode == "name_without_extension":
+                    item["name"] = "个人简历"
+                    item["media_type"] = "application/pdf"
+                elif type(self).mode != "omit_size_hash":
+                    item["size"] = len(content)
+                    item["sha256"] = hashlib.sha256(content).hexdigest()
                 body = {
-                    "items": [{
-                        "id": "file-1", "name": name,
-                        "media_type": media_type, "size": len(content),
-                        "sha256": hashlib.sha256(content).hexdigest(),
-                        "created_at": "2026-07-30T12:00:00Z",
-                        "expires_at": "2026-08-06T12:00:00Z",
-                        "last_downloaded_at": None,
-                    }],
+                    "items": [item],
                     "page": int(parse_qs(parsed.query)["page"][0]),
                     "page_size": int(parse_qs(parsed.query)["page_size"][0]),
                     "total": 1,
@@ -206,6 +218,31 @@ class PRPClientTests(unittest.TestCase):
             metadata = self.client.download_file(self.access, "file-1", destination)
 
         self.assertEqual("Kimi发票.pdf", metadata["name"])
+
+    def test_list_accepts_items_without_size_and_sha256(self):
+        for mode in ("omit_size_hash", "null_size_hash"):
+            with self.subTest(mode=mode):
+                _PRPHandler.mode = mode
+                result = self.client.list_files(self.access, 1, 20)
+                item = result["items"][0]
+                self.assertEqual("file-1", item["id"])
+                if mode == "omit_size_hash":
+                    self.assertNotIn("size", item)
+                    self.assertNotIn("sha256", item)
+                else:
+                    self.assertIsNone(item["size"])
+                    self.assertIsNone(item["sha256"])
+
+    def test_list_accepts_empty_sha256_and_name_without_extension(self):
+        for mode, expected_name in (
+            ("empty_sha256", "sample.pdf"),
+            ("name_without_extension", "个人简历"),
+        ):
+            with self.subTest(mode=mode):
+                _PRPHandler.mode = mode
+                result = self.client.list_files(self.access, 1, 20)
+                self.assertEqual("file-1", result["items"][0]["id"])
+                self.assertEqual(expected_name, result["items"][0]["name"])
 
     def test_list_accepts_supported_image_and_docx_metadata(self):
         for mode, expected_type in (

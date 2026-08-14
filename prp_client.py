@@ -21,7 +21,8 @@ from edge_limits import DEFAULT_MAX_PRP_DOWNLOAD_BYTES
 
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_LIST_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_FILE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _MAX_LIST_RESPONSE_BYTES = 1 << 20
 _MEDIA_EXTENSIONS = {
     "application/pdf": {".pdf"},
@@ -277,32 +278,42 @@ class PRPClient:
 
     @staticmethod
     def _validate_file_item(item: Any) -> None:
+        # 列表只收元数据。size/sha256 可省略、为 null 或空串；文件名不必带扩展名（实时渲染尚未生成文件）。
         required = {
-            "id", "name", "media_type", "size", "sha256",
+            "id", "name", "media_type",
             "created_at", "expires_at", "last_downloaded_at",
         }
-        if not isinstance(item, dict) or set(item) != required:
+        allowed = required | {"size", "sha256"}
+        if not isinstance(item, dict) or not required <= set(item) <= allowed:
             raise PRPClientError("invalid_prp_response")
         if (
             not isinstance(item["id"], str)
             or not _FILE_ID_RE.fullmatch(item["id"])
             or not isinstance(item["name"], str)
             or not item["name"]
-            or Path(item["name"]).suffix.lower()
-            not in _MEDIA_EXTENSIONS.get(item["media_type"], set())
-            or not isinstance(item["size"], int)
-            or isinstance(item["size"], bool)
-            or item["size"] < 0
-            or not isinstance(item["sha256"], str)
-            or not _SHA256_RE.fullmatch(item["sha256"])
+            or item["media_type"] not in _MEDIA_EXTENSIONS
             or not isinstance(item["created_at"], str)
             or not isinstance(item["expires_at"], str)
             or (
                 item["last_downloaded_at"] is not None
                 and not isinstance(item["last_downloaded_at"], str)
             )
+            or not PRPClient._optional_list_size(item.get("size"))
+            or not PRPClient._optional_list_sha256(item.get("sha256"))
         ):
             raise PRPClientError("invalid_prp_response")
+
+    @staticmethod
+    def _optional_list_size(value: Any) -> bool:
+        if value is None:
+            return True
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    @staticmethod
+    def _optional_list_sha256(value: Any) -> bool:
+        if value is None or value == "":
+            return True
+        return isinstance(value, str) and bool(_LIST_SHA256_RE.fullmatch(value))
 
     def _required_length(self, response: requests.Response, max_download_bytes: int, size_limit_code: str) -> int:
         raw = response.headers.get("Content-Length", "")
