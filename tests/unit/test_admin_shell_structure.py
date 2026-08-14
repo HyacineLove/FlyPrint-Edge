@@ -52,6 +52,15 @@ class AdminShellStructureTests(unittest.TestCase):
         self.assertNotIn("network_bind_address", render_script)
         self.assertNotIn("network_port", render_script)
 
+    def test_activated_cloud_section_keeps_cloud_url_editable(self):
+        render_script = read_source("static/admin/modules/render-sections.js")
+        unactivated_start = render_script.index("  return `", render_script.index("if (!activated)"))
+        activated_start = render_script.index("  return `", unactivated_start + 1)
+        activated_end = render_script.index("  `;", activated_start)
+        activated_block = render_script[activated_start:activated_end]
+        self.assertIn('id="cloud_base_url"', activated_block)
+        self.assertNotIn('<input value="${escapeHtml(cfg.base_url || "")}" disabled>', activated_block)
+
     def test_admin_navigation_and_sections_use_compact_labels_without_duplicate_titles(self):
         html = read_source("static/admin/html/index.html")
         render_script = read_source("static/admin/modules/render-sections.js")

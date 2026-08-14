@@ -120,7 +120,7 @@ export function bindDoneViewEvents({ appState, restartCycle, continueToFiles, re
     try {
       const availability = await getJson(api.printerAvailability);
       if (!availability?.faulted) {
-        setText(["77_21"], "打印机已恢复，可退出登录后继续使用");
+        setText(["77_21"], "打印机已恢复，可返回首页后继续使用");
         setLogoutEnabled(true);
         setRefreshEnabled(false);
         doneLoading = false;

@@ -206,17 +206,10 @@ class ConfigService:
 
         changes = self.classify_changes(current, merged)
 
-        # Cloud 配置预检必须在落盘前：无效配置不写盘，避免磁盘/运行时状态分叉
+        # Cloud 地址只做格式校验，不要求保存时在线。Edge 需要能够在 Cloud
+        # 地址变更、网络中断或 Cloud 重启期间先保存配置，运行时随后重连。
         cloud_reconnected = False
         warnings: List[str] = []
-        if changes["cloud_changed"] and cloud_service:
-            preflight = self.test_cloud_connection({"cloud": merged.get("cloud", {})})
-            if not preflight.get("success"):
-                return {
-                    "success": False,
-                    "saved": False,
-                    "errors": [preflight.get("message") or "cloud configuration test failed"],
-                }
 
         self.config_repo.replace_full_config(merged)
 

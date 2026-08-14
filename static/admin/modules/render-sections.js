@@ -115,7 +115,7 @@ function renderCloudSection(state) {
       <button id="cloudUnbindBtn" type="button" class="btn btn-danger">解除本机绑定</button>
     </div>
     <div class="config-grid config-grid--compact">
-      <div class="field"><label>Cloud 地址</label><input value="${escapeHtml(cfg.base_url || "")}" disabled></div>
+      <div class="field"><label for="cloud_base_url">Cloud 地址</label><input id="cloud_base_url" data-section="cloud" data-key="base_url" value="${escapeHtml(cfg.base_url || "")}"></div>
       <div class="field">
         <label for="cloud_node_name">节点名称</label>
         <input id="cloud_node_name" data-section="cloud" data-key="node_name" value="${escapeHtml(cfg.node_name || "")}">

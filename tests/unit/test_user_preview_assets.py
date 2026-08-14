@@ -362,6 +362,13 @@ class UserPreviewAssetTests(unittest.TestCase):
         )
         self.assertIn("打印机已恢复", done_view)
 
+    def test_printer_recovered_copy_matches_home_return_button(self):
+        done_view = read_source(BASE_DIR / "modules/views/done-view.js")
+
+        self.assertIn('logoutLabel.textContent = "返回首页"', done_view)
+        self.assertIn('setText(["77_21"], "打印机已恢复，可返回首页后继续使用")', done_view)
+        self.assertNotIn("可退出登录后继续使用", done_view)
+
     def test_done_view_uses_only_the_main_header_countdown(self):
         done_view = read_source(BASE_DIR / "modules/views/done-view.js")
         done_css = read_source(BASE_DIR / "css/done.css")

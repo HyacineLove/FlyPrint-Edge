@@ -1,10 +1,25 @@
 import os
 import sys
 import unittest
+from copy import deepcopy
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from config_service import ConfigService
+
+
+class InMemoryConfigRepo:
+    def __init__(self, config):
+        self.config = deepcopy(config)
+
+    def get_full_config(self):
+        return deepcopy(self.config)
+
+    def replace_full_config(self, config):
+        self.config = deepcopy(config)
+
+    def save_config(self):
+        return None
 
 
 class ConfigServiceTests(unittest.TestCase):
@@ -41,6 +56,42 @@ class ConfigServiceTests(unittest.TestCase):
             result = self.service.test_cloud_connection({"cloud": {"base_url": "http://cloud.example.com"}})
         self.assertTrue(result["success"])
         get.assert_called_once()
+
+    def test_cloud_url_change_is_saved_when_target_cloud_is_temporarily_unavailable(self):
+        repo = InMemoryConfigRepo({
+            "cloud": {
+                "base_url": "https://old-cloud.example.com",
+                "credential_blob": "opaque",
+                "node_id": "node-1",
+                "node_name": "terminal-1",
+                "location": "site-a",
+                "heartbeat_interval": 30,
+            },
+            "settings": {},
+            "network": {"bind_address": "127.0.0.1", "port": 7860},
+        })
+        service = ConfigService(repo)
+        cloud_service = type("CloudServiceStub", (), {})()
+        cloud_service.reconfigure = lambda config, preserve_node_id: {
+            "success": True,
+            "registered": True,
+            "connected": False,
+            "message": "waiting for cloud connection",
+        }
+
+        with patch.object(
+            service,
+            "test_cloud_connection",
+            return_value={"success": False, "message": "target cloud unavailable"},
+        ):
+            result = service.save_and_apply(
+                {"cloud": {"base_url": "https://new-cloud.example.com"}},
+                cloud_service=cloud_service,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("https://new-cloud.example.com", repo.config["cloud"]["base_url"])
+        self.assertEqual("node-1", repo.config["cloud"]["node_id"])
 
     def test_public_config_exposes_normalized_edge_limits(self):
         payload = self.service.build_public_config({

@@ -48,6 +48,48 @@ class CloudServiceReconfigureTests(unittest.TestCase):
         self.assertTrue(result["success"])
         start_websocket.assert_called_once()
 
+    def test_cloud_start_keeps_local_binding_when_profile_report_is_unavailable(self):
+        manager = Mock()
+        manager.config.config = {
+            "cloud": {
+                "base_url": "https://cloud.example.com",
+                "credential_blob": "protected",
+                "node_id": "node-1",
+                "profile_pending": True,
+            }
+        }
+        service = CloudService(
+            {
+                "base_url": "https://cloud.example.com",
+                "credential_blob": "protected",
+                "node_id": "node-1",
+                "profile_pending": True,
+            },
+            printer_manager=manager,
+        )
+        api_client = Mock()
+        api_client.update_self_profile.return_value = {
+            "success": False,
+            "error": "cloud unavailable",
+        }
+
+        with (
+            patch("cloud_service.unprotect_credentials", return_value={"client_id": "client-1", "client_secret": "secret-1"}),
+            patch("cloud_service.CloudAuthClient"),
+            patch("cloud_service.CloudAPIClient", return_value=api_client),
+            patch.object(service, "_start_websocket") as start_websocket,
+            patch.object(service, "sync_ops_contacts", return_value={"success": False}),
+            patch.object(service, "_start_ops_contacts_sync"),
+        ):
+            result = service.start()
+
+        self.assertTrue(result["success"])
+        self.assertEqual("node-1", service.node_id)
+        self.assertTrue(service.registered)
+        self.assertTrue(service.config["profile_pending"])
+        api_client.update_self_profile.assert_not_called()
+        start_websocket.assert_called_once()
+
     def test_job_delivery_store_is_stored_in_runtime_directory(self):
         config = Mock()
         config.config_file = r"C:\FlyPrint Edge\config.json"
@@ -160,7 +202,7 @@ class CloudServiceReconfigureTests(unittest.TestCase):
         self.assertTrue(result["success"])
         mocked_start.assert_called_once()
 
-    def test_mark_remote_node_missing_clears_stale_registration(self):
+    def test_remote_node_missing_does_not_clear_local_binding_for_reconnect(self):
         printer_config = Mock()
         printer_config.config = {
             "cloud": {"node_id": "node-123"},
@@ -195,16 +237,16 @@ class CloudServiceReconfigureTests(unittest.TestCase):
         service._mark_remote_node_missing("websocket handshake returned 404")
 
         self.assertTrue(service.has_stale_node_registration())
-        self.assertIsNone(service.node_id)
-        self.assertFalse(service.registered)
-        self.assertNotIn("node_id", service.config)
-        self.assertNotIn("node_id", printer_config.config["cloud"])
-        self.assertIsNone(service.api_client.node_id)
-        self.assertIsNone(service.print_job_handler.node_id)
-        heartbeat_service.stop.assert_called_once()
-        status_reporter.stop.assert_called_once()
-        self.assertFalse(websocket_client.running)
-        self.assertFalse(websocket_client.connected)
+        self.assertEqual("node-123", service.node_id)
+        self.assertTrue(service.registered)
+        self.assertEqual("node-123", service.config["node_id"])
+        self.assertEqual("node-123", printer_config.config["cloud"]["node_id"])
+        self.assertEqual("node-123", service.api_client.node_id)
+        self.assertEqual("node-123", service.print_job_handler.node_id)
+        heartbeat_service.stop.assert_not_called()
+        status_reporter.stop.assert_not_called()
+        self.assertTrue(websocket_client.running)
+        self.assertTrue(websocket_client.connected)
 
 
 if __name__ == "__main__":

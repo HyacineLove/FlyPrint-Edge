@@ -129,50 +129,19 @@ class CloudService:
             self.printer_manager.config.save_config()
 
     def _mark_remote_node_missing(self, detail: str):
-        stale_node_id = self.node_id
-        if not stale_node_id and self.node_missing_remote:
+        if self.node_missing_remote:
             return
 
+        # 远端 404 也可能只是 Cloud 地址、反向代理路径或当前网络发生变化。
+        # 不能据此销毁本机凭证和 node_id，否则设备恢复网络或改正地址后会被
+        # 错误地要求重新激活。只有显式解除绑定才清理本地注册关系。
         self.node_missing_remote = True
-        self.last_error = f"remote node missing: {detail}"
-        self.node_id = None
-        self.registered = False
-        self.config.pop("node_id", None)
-
-        if self.api_client:
-            self.api_client.node_id = None
-        self.print_authorization_client = None
-        if self.print_job_handler:
-            self.print_job_handler.node_id = None
-        if self.heartbeat_service:
-            self.heartbeat_service.stop()
-            self.heartbeat_service = None
-        if self.status_reporter:
-            self.status_reporter.stop()
-            self.status_reporter = None
-            self.print_authorization_client = None
-        if self.websocket_client:
-            self.websocket_client.running = False
-            self.websocket_client.connected = False
-            try:
-                # 真正停止 WebSocket 线程（关闭连接并 join），而非只设标志
-                self.websocket_client.stop()
-            except Exception as exc:
-                logger.debug("Failed to stop websocket client on node missing", exc_info=True)
-
-        # 通知宿主（main.py）同步全局 node_id，避免状态上报继续用旧节点号
-        if self.node_missing_callback:
-            try:
-                self.node_missing_callback()
-            except Exception as exc:
-                logger.debug("node_missing callback failed", exc_info=True)
-
-        try:
-            self._persist_node_id()
-        except Exception as exc:
-            logger.debug("Failed to persist cleared node_id", exc_info=True)
-
-        logger.warning("Remote node missing; local node_id cleared: node_id=%s", stale_node_id)
+        self.last_error = f"remote node unavailable: {detail}"
+        logger.warning(
+            "Remote node unavailable; preserving local binding for reconnect: node_id=%s detail=%s",
+            self.node_id,
+            detail,
+        )
 
     def _initialize_components(self):
         """Initialize cloud clients from the current configuration."""
@@ -241,6 +210,7 @@ class CloudService:
         """Bring the cloud runtime online for the current node state."""
         try:
             logger.debug("Starting cloud service")
+            self.node_missing_remote = False
 
             if not self.auth_client or not self.api_client or not self.print_job_handler:
                 init_result = self._initialize_components()
@@ -256,19 +226,6 @@ class CloudService:
                     "registered": False,
                     "connected": False,
                 }
-
-            if self.config.get("profile_pending"):
-                profile = self.api_client.update_self_profile(
-                    self.config.get("node_name") or None,
-                    self.config.get("location") or None,
-                )
-                if not profile.get("success"):
-                    self.last_error = profile.get("error") or "edge profile report failed"
-                    return {"success": False, "message": self.last_error, "node_id": self.node_id}
-                self.config["profile_pending"] = False
-                if self.printer_manager and hasattr(self.printer_manager, "config"):
-                    self.printer_manager.config.config.setdefault("cloud", {})["profile_pending"] = False
-                    self.printer_manager.config.save_config()
 
             self._start_websocket()
 
@@ -313,16 +270,16 @@ class CloudService:
                         self.print_job_handler.status_reporter = self.status_reporter
                     logger.debug("Printer status reporter started")
 
-            self.sync_ops_contacts()
             self._start_ops_contacts_sync()
 
             self.last_error = None
+            connected = bool(self.websocket_client and self.websocket_client.connected)
             return {
                 "success": True,
-                "message": "cloud service started",
+                "message": "cloud service started" if connected else "cloud configured, waiting for connection",
                 "node_id": self.node_id,
                 "registered": True,
-                "connected": bool(self.websocket_client and self.websocket_client.connected),
+                "connected": connected,
             }
         except Exception as exc:
             logger.exception("Cloud service start failed")
@@ -575,16 +532,44 @@ class CloudService:
                 logger.exception("Ops contacts change handler failed")
         return {"success": True, "data": contacts}
 
+    def _sync_pending_profile(self) -> Dict[str, Any]:
+        """在后台上报 Edge 自有资料，失败时保留待同步标记。"""
+        if not self.config.get("profile_pending") or not self.api_client or not self.node_id:
+            return {"success": True, "skipped": True}
+
+        profile = self.api_client.update_self_profile(
+            self.config.get("node_name") or None,
+            self.config.get("location") or None,
+        )
+        if not profile.get("success"):
+            return profile
+
+        self.config["profile_pending"] = False
+        if self.printer_manager and hasattr(self.printer_manager, "config"):
+            self.printer_manager.config.config.setdefault("cloud", {})["profile_pending"] = False
+            self.printer_manager.config.save_config()
+        return profile
+
+    def _sync_cloud_metadata_once(self) -> None:
+        try:
+            profile = self._sync_pending_profile()
+            if not profile.get("success"):
+                self.last_error = profile.get("error") or "edge profile report failed"
+                logger.warning("Edge profile report deferred: %s", self.last_error)
+            contacts = self.sync_ops_contacts()
+            if not contacts.get("success"):
+                logger.warning("Ops contacts sync deferred: %s", contacts.get("error"))
+        except Exception:
+            logger.exception("Cloud metadata sync failed")
+
     def _start_ops_contacts_sync(self):
         self._stop_ops_contacts_sync()
         self._ops_contacts_stop.clear()
 
         def _loop():
+            self._sync_cloud_metadata_once()
             while not self._ops_contacts_stop.wait(max(10, int(self.heartbeat_interval or 30))):
-                try:
-                    self.sync_ops_contacts()
-                except Exception:
-                    logger.exception("Periodic ops contacts sync failed")
+                self._sync_cloud_metadata_once()
 
         self._ops_contacts_thread = threading.Thread(target=_loop, daemon=True, name="ops-contacts-sync")
         self._ops_contacts_thread.start()
