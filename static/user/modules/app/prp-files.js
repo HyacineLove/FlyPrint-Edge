@@ -57,13 +57,21 @@ export function mapPRPFileError(error) {
 // 列表 size/sha256 可省略或为 null；有值时才校验。未知体积不在列表阶段拦截。
 export function normalizePRPFilePage(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("文件列表无效");
-  const { items, page, page_size: pageSize, total } = payload;
-  if (!Array.isArray(items) || !Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50 || !Number.isInteger(total) || total < 0) throw new Error("文件分页无效");
+  const { items, page, page_size: pageSize, total, message } = payload;
+  const allowedKeys = new Set(["items", "page", "page_size", "total", "message"]);
+  if (Object.keys(payload).some((key) => !allowedKeys.has(key)) || (message !== undefined && typeof message !== "string") || !Array.isArray(items) || !Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50 || !Number.isInteger(total) || total < 0) throw new Error("文件分页无效");
   const normalized = items.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !ITEM_KEYS.has(key)) || typeof item.id !== "string" || !item.id || typeof item.name !== "string" || !item.name || !SUPPORTED_MEDIA_TYPES.has(item.media_type) || (item.size != null && (!Number.isInteger(item.size) || item.size < 0)) || (item.sha256 != null && item.sha256 !== "" && (typeof item.sha256 !== "string" || !/^[0-9a-fA-F]{64}$/.test(item.sha256))) || Number.isNaN(Date.parse(item.created_at)) || Number.isNaN(Date.parse(item.expires_at)) || (item.last_downloaded_at !== null && Number.isNaN(Date.parse(item.last_downloaded_at)))) throw new Error("文件数据无效");
+    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !ITEM_KEYS.has(key)) || typeof item.id !== "string" || !item.id || typeof item.name !== "string" || !item.name || !SUPPORTED_MEDIA_TYPES.has(item.media_type) || (item.size != null && (!Number.isInteger(item.size) || item.size < 0)) || (item.sha256 != null && item.sha256 !== "" && (typeof item.sha256 !== "string" || !/^[0-9a-fA-F]{64}$/.test(item.sha256))) || (item.created_at != null && (typeof item.created_at !== "string" || Number.isNaN(Date.parse(item.created_at)))) || (item.expires_at != null && (typeof item.expires_at !== "string" || Number.isNaN(Date.parse(item.expires_at)))) || (item.last_downloaded_at !== null && (typeof item.last_downloaded_at !== "string" || Number.isNaN(Date.parse(item.last_downloaded_at))))) throw new Error("文件数据无效");
     return { ...item };
   });
-  return { items: normalized, page, page_size: pageSize, total };
+  return { items: normalized, page, page_size: pageSize, total, ...(message === undefined ? {} : { message }) };
+}
+
+export function getFileListPlaceholder({ items, message, error } = {}) {
+  if (error) return "服务异常";
+  if (Array.isArray(items) && items.length > 0) return "";
+  const providerMessage = typeof message === "string" ? message.trim() : "";
+  return providerMessage && providerMessage !== "Success" ? providerMessage : "暂无文件";
 }
 
 function fileBadge(mediaType) {
@@ -78,12 +86,32 @@ export function formatFileSize(size) {
   return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
+export const SESSION_UPLOAD_PROVIDER_ID = "session-upload";
+export const SESSION_UPLOAD_LABEL = "临时文件";
+export const SESSION_UPLOAD_HINT = "临时文件将在退出登录后清除";
+
+export function sessionUploadHint(providerID) {
+  return providerID === SESSION_UPLOAD_PROVIDER_ID ? SESSION_UPLOAD_HINT : "";
+}
+
+export function sessionUploadLabel(displayName, providerID) {
+  return providerID === SESSION_UPLOAD_PROVIDER_ID ? SESSION_UPLOAD_LABEL : displayName;
+}
+
+export function displayFileName(listName, downloadName) {
+  const listed = String(listName || "").trim();
+  const downloaded = String(downloadName || "").trim();
+  if (listed && !/^\?+(\.[A-Za-z0-9]+)?$/.test(listed)) return listed;
+  if (downloaded && !/^\?+(\.[A-Za-z0-9]+)?$/.test(downloaded)) return downloaded;
+  return listed || downloaded || "文档";
+}
+
 export function exceedsLocalFileSize(item, maxFileSizeBytes) {
   return Number.isInteger(item?.size) && Number.isInteger(maxFileSizeBytes) && maxFileSizeBytes > 0 && item.size > maxFileSizeBytes;
 }
 
 export function renderPRPFilesView() {
-  return `<div class="files-terminal-shell fill-bg-gradient"><main id="filesView" class="files-view"><header class="files-header"><div class="files-header-title-row"><h1 id="filesGreeting">请选择文件</h1><button id="filesRefresh" class="files-refresh ui-pager-button" type="button">刷新</button></div><div class="files-countdown ui-main-countdown" data-countdown-phase="idle"><span class="ui-countdown-ring"></span><strong id="filesCountdown" class="ui-countdown-value">--</strong></div><p id="filesClock" class="files-clock"></p></header><section class="files-source-switch" aria-label="文件来源"><span class="files-source-label">文件来源</span><nav id="providerTabs" class="provider-tabs" aria-label="文件来源"></nav></section><section id="filesPanel" class="files-panel" aria-busy="true"><div class="files-panel-heading"><h2>文件列表</h2><p id="filesStatus" class="files-status" aria-live="polite"></p></div><div id="filesList" class="files-list" role="list"></div><div class="files-pager"><button id="filesPrev" type="button">上一页</button><span id="filesPage">1 / 1</span><button id="filesNext" type="button">下一页</button></div></section><div class="ui-action-region files-action-region files-action-region--single is-single"><button id="filesExit" class="files-exit ui-action-button ui-action-button--primary" type="button">退出登录</button></div></main></div>`;
+  return `<div class="files-terminal-shell fill-bg-gradient"><main id="filesView" class="files-view"><header class="files-header"><div class="files-header-title-row"><h1 id="filesGreeting">请选择文件</h1><button id="filesRefresh" class="files-refresh ui-pager-button" type="button">刷新</button></div><div class="files-countdown ui-main-countdown" data-countdown-phase="idle"><span class="ui-countdown-ring"></span><strong id="filesCountdown" class="ui-countdown-value">--</strong></div><p id="filesClock" class="files-clock"></p></header><section class="files-source-switch" aria-label="文件来源"><span class="files-source-label">文件来源</span><nav id="providerTabs" class="provider-tabs" aria-label="文件来源"></nav></section><section id="filesPanel" class="files-panel" aria-busy="true"><div class="files-panel-heading"><h2>文件列表</h2><p id="filesStatus" class="files-status" aria-live="polite"></p></div><div id="filesList" class="files-list" role="list"></div><div class="files-pager"><button id="filesPrev" type="button">上一页</button><span id="filesPage">1 / 1</span><button id="filesNext" type="button">下一页</button></div></section><div class="ui-action-region files-action-region files-action-region--single is-single"><p id="filesSessionHint" class="files-session-hint" hidden></p><button id="filesExit" class="files-exit ui-action-button ui-action-button--primary" type="button">退出登录</button></div></main></div>`;
 }
 
 export function createPRPFilesRefreshHandler(getCurrentPage, resetCountdown, load) {
@@ -143,7 +171,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "provider-tab";
-      button.textContent = state.display_name;
+      button.textContent = sessionUploadLabel(state.display_name, state.id);
       button.dataset.active = String(state.id === activeProvider);
       button.onclick = () => {
         activeProvider = state.id;
@@ -154,24 +182,38 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       };
       return button;
     }));
+    const hint = document.getElementById("filesSessionHint");
+    if (hint) {
+      const hasSessionUpload = Array.from(states.values()).some((state) => state.id === SESSION_UPLOAD_PROVIDER_ID);
+      hint.textContent = hasSessionUpload ? SESSION_UPLOAD_HINT : "";
+      hint.hidden = !hasSessionUpload;
+    }
   }
 
   function renderCurrent() {
     const state = current();
     if (!state) return;
     const busy = Boolean(state.loading || state.selecting);
+    const listError = String(state.listError || "");
     panel.setAttribute("aria-busy", String(busy));
     list.replaceChildren();
-    if (state.error) setStatus(state.error, "error");
+    if (state.error && !listError) setStatus(state.error, "error");
     else if (state.selecting) setStatus("正在下载并校验文件，请稍候…", "loading");
     else if (state.loading) setStatus("正在加载文件列表，请稍候…", "loading");
-    else setStatus(state.items?.length ? "" : "暂无文件", state.items?.length ? "" : "empty");
+    else setStatus("");
     const pages = Math.max(1, Math.ceil((state.total || 0) / (state.page_size || 6)));
     document.getElementById("filesPage").textContent = `${state.page || 1} / ${pages}`;
-    previous.disabled = busy || Boolean(state.error) || (state.page || 1) <= 1;
-    next.disabled = busy || Boolean(state.error) || (state.page || 1) >= pages;
+    previous.disabled = busy || Boolean(state.error) || Boolean(listError) || (state.page || 1) <= 1;
+    next.disabled = busy || Boolean(state.error) || Boolean(listError) || (state.page || 1) >= pages;
     refresh.disabled = busy;
-    if (!state.items) return;
+    if (state.items === null && !listError) return;
+    if (listError || !Array.isArray(state.items) || state.items.length === 0) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "files-list-placeholder";
+      placeholder.textContent = getFileListPlaceholder({ items: state.items, message: state.message, error: listError });
+      list.append(placeholder);
+      return;
+    }
     for (const item of state.items) {
       const blocked = exceedsLocalFileSize(item, maxFileSizeBytes);
       const row = document.createElement("button");
@@ -223,6 +265,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     const timed = createTimedRequestSignal(controller.signal, FILE_LIST_REQUEST_TIMEOUT_MS);
     state.loading = true;
     state.error = "";
+    state.listError = "";
     if (providerID === activeProvider) {
       syncCountdown();
       renderCurrent();
@@ -230,16 +273,19 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
     try {
       const data = normalizePRPFilePage(await getJson(endpoint(providerID, page), { signal: timed.signal }));
       if (controllers.get(providerID) !== controller) return;
-      Object.assign(state, data, { loading: false, error: "" });
+      Object.assign(state, data, { loading: false, error: "", listError: "", message: data.message ?? "" });
     } catch (error) {
-      if (controllers.get(providerID) !== controller || error?.name === "AbortError") return;
+      if (controllers.get(providerID) !== controller || (error?.name === "AbortError" && !timed.didTimeout())) return;
       state.loading = false;
       if (isPortalSessionInvalidError(error)) {
         await exitToQrCode();
         return;
       }
-      const reason = timed.didTimeout() ? mapPRPFileError({ code: "prp_list_timeout" }) : mapPRPFileError(error);
-      state.error = `文件列表获取失败：${reason}`;
+      state.items = [];
+      state.message = "";
+      state.total = 0;
+      state.listError = "服务异常";
+      state.error = "";
     } finally {
       timed.dispose();
       if (providerID === activeProvider && !exiting) {
@@ -265,7 +311,7 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
       appState.session.file = {
         file_id: file.file_id,
         provider_id: providerID,
-        file_name: file.file_name,
+        file_name: displayFileName(item.name, file.file_name),
         file_type: file.file_type,
         content_hash: file.content_hash,
         source_origin: "prp",
@@ -322,6 +368,8 @@ export function bindPRPFilesViewEvents({ appState, router, restartCycle }) {
           loading: false,
           selecting: false,
           error: "",
+          listError: "",
+          message: "",
         });
       }
       activeProvider = states.keys().next().value || null;

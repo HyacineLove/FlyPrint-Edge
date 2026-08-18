@@ -48,6 +48,15 @@ class _PRPHandler(BaseHTTPRequestHandler):
         type(self).seen_authorization = self.headers.get("Authorization", "")
         type(self).seen_query = parsed.query
         if parsed.path == "/api/providers/prp-a/files":
+            if type(self).mode == "empty_message":
+                self._json({
+                    "items": [],
+                    "page": int(parse_qs(parsed.query)["page"][0]),
+                    "page_size": int(parse_qs(parsed.query)["page_size"][0]),
+                    "total": 0,
+                    "message": "暂无简历，请前往丽娃云聘系统创建并发布自己的简历。",
+                })
+                return
             if type(self).mode == "bad_pagination":
                 body = {"items": [], "page": "1", "page_size": 20, "total": 0}
             else:
@@ -71,6 +80,9 @@ class _PRPHandler(BaseHTTPRequestHandler):
                 elif type(self).mode != "omit_size_hash":
                     item["size"] = len(content)
                     item["sha256"] = hashlib.sha256(content).hexdigest()
+                if type(self).mode == "null_dates":
+                    item["created_at"] = None
+                    item["expires_at"] = None
                 body = {
                     "items": [item],
                     "page": int(parse_qs(parsed.query)["page"][0]),
@@ -90,7 +102,11 @@ class _PRPHandler(BaseHTTPRequestHandler):
             disposition = (
                 "attachment; filename*=utf-8''Kimi%E5%8F%91%E7%A5%A8.pdf"
                 if type(self).mode == "unicode_filename"
-                else f'attachment; filename="{name}"'
+                else (
+                    "attachment; filename=\"????.pdf\"; filename*=UTF-8''%E4%B8%AA%E4%BA%BA%E7%AE%80%E5%8E%86.pdf"
+                    if type(self).mode == "question_mark_filename"
+                    else f'attachment; filename="{name}"'
+                )
             )
             self.send_header("Content-Disposition", disposition)
             self.end_headers()
@@ -219,6 +235,13 @@ class PRPClientTests(unittest.TestCase):
 
         self.assertEqual("Kimi发票.pdf", metadata["name"])
 
+    def test_download_prefers_rfc5987_name_over_question_mark_fallback(self):
+        _PRPHandler.mode = "question_mark_filename"
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "selected.pdf"
+            metadata = self.client.download_file(self.access, "file-1", destination)
+        self.assertEqual("个人简历.pdf", metadata["name"])
+
     def test_list_accepts_items_without_size_and_sha256(self):
         for mode in ("omit_size_hash", "null_size_hash"):
             with self.subTest(mode=mode):
@@ -232,6 +255,19 @@ class PRPClientTests(unittest.TestCase):
                 else:
                     self.assertIsNone(item["size"])
                     self.assertIsNone(item["sha256"])
+
+    def test_list_preserves_empty_list_message(self):
+        _PRPHandler.mode = "empty_message"
+        result = self.client.list_files(self.access, 1, 20)
+        self.assertEqual("暂无简历，请前往丽娃云聘系统创建并发布自己的简历。", result["message"])
+        self.assertEqual([], result["items"])
+
+    def test_list_accepts_unknown_created_and_expiry_times(self):
+        _PRPHandler.mode = "null_dates"
+        result = self.client.list_files(self.access, 1, 20)
+        item = result["items"][0]
+        self.assertIsNone(item["created_at"])
+        self.assertIsNone(item["expires_at"])
 
     def test_list_accepts_empty_sha256_and_name_without_extension(self):
         for mode, expected_name in (

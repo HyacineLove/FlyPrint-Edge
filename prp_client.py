@@ -11,7 +11,7 @@ from email.message import Message
 from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from typing import Any, Dict
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 import zipfile
 
 import requests
@@ -258,11 +258,13 @@ class PRPClient:
 
     @staticmethod
     def _validate_file_list(payload: Any, page: int, page_size: int) -> None:
-        if not isinstance(payload, dict) or set(payload) != {
-            "items", "page", "page_size", "total"
-        }:
+        required = {"items", "page", "page_size", "total"}
+        allowed = required | {"message"}
+        if not isinstance(payload, dict) or not required <= set(payload) <= allowed:
             raise PRPClientError("invalid_prp_response")
         if (
+            ("message" in payload and not isinstance(payload["message"], str))
+            or
             payload["page"] != page
             or isinstance(payload["page"], bool)
             or payload["page_size"] != page_size
@@ -292,8 +294,8 @@ class PRPClient:
             or not isinstance(item["name"], str)
             or not item["name"]
             or item["media_type"] not in _MEDIA_EXTENSIONS
-            or not isinstance(item["created_at"], str)
-            or not isinstance(item["expires_at"], str)
+            or (item["created_at"] is not None and not isinstance(item["created_at"], str))
+            or (item["expires_at"] is not None and not isinstance(item["expires_at"], str))
             or (
                 item["last_downloaded_at"] is not None
                 and not isinstance(item["last_downloaded_at"], str)
@@ -331,15 +333,45 @@ class PRPClient:
     def _download_name(disposition: str) -> str:
         message = Message()
         message["Content-Disposition"] = disposition
-        name = message.get_param("filename", header="Content-Disposition")
-        if isinstance(name, tuple):
-            try:
-                name = collapse_rfc2231_value(name, errors="strict")
-            except (LookupError, UnicodeError) as exc:
-                raise PRPClientError("invalid_prp_response") from exc
+        starred = None
+        plain = None
+        for key, value in message.get_params(header="Content-Disposition") or []:
+            if key != "filename":
+                continue
+            if isinstance(value, tuple):
+                starred = value
+            elif isinstance(value, str) and value:
+                plain = value
+        name = PRPClient._decode_disposition_param(starred)
+        if not name:
+            name = PRPClient._decode_disposition_param(
+                message.get_param("filename*", header="Content-Disposition")
+            )
+        if not name:
+            name = PRPClient._decode_disposition_param(plain)
         if not isinstance(name, str) or not name or Path(name).name != name:
             raise PRPClientError("invalid_prp_response")
         return name
+
+    @staticmethod
+    def _decode_disposition_param(value: Any) -> str | None:
+        if isinstance(value, tuple):
+            try:
+                decoded = collapse_rfc2231_value(value, errors="strict")
+            except (LookupError, UnicodeError):
+                return None
+            return decoded if isinstance(decoded, str) and decoded else None
+        if not isinstance(value, str) or not value:
+            return None
+        parts = value.split("'", 2)
+        if len(parts) == 3:
+            charset, _lang, encoded = parts
+            try:
+                decoded = unquote(encoded, encoding=charset or "utf-8", errors="strict")
+            except (LookupError, UnicodeError):
+                return None
+            return decoded or None
+        return value
 
     @staticmethod
     def _validate_download_content(path: Path, media_type: str) -> None:

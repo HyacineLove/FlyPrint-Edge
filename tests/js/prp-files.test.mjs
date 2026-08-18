@@ -6,6 +6,9 @@ import {
   formatFileSize,
   isPortalSessionInvalidError,
   normalizePRPFilePage,
+  sessionUploadHint,
+  sessionUploadLabel,
+  displayFileName,
 } from "../../static/user/modules/app/prp-files.js";
 
 const item = {
@@ -57,4 +60,17 @@ test("recognizes an expired portal session so the kiosk can explain the logout",
   assert.equal(isPortalSessionInvalidError({ status: 401 }), true);
   assert.equal(isPortalSessionInvalidError({ code: "portal_session_invalid" }), true);
   assert.equal(isPortalSessionInvalidError({ code: "network_error", status: 502 }), false);
+});
+
+test("shows a session-upload source hint only for official session files", () => {
+  assert.equal(sessionUploadHint("session-upload"), "临时文件将在退出登录后清除");
+  assert.equal(sessionUploadHint("liwa"), "");
+  assert.equal(sessionUploadLabel("本次上传", "session-upload"), "临时文件");
+  assert.equal(sessionUploadLabel("丽娃云聘", "liwa"), "丽娃云聘");
+});
+
+test("preview keeps the list display name when download metadata is question marks", () => {
+  assert.equal(displayFileName("个人简历.pdf", "????.pdf"), "个人简历.pdf");
+  assert.equal(displayFileName("个人简历", "????.pdf"), "个人简历");
+  assert.equal(displayFileName("", "resume.pdf"), "resume.pdf");
 });

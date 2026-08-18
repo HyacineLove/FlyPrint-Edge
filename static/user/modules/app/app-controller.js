@@ -280,7 +280,7 @@ export function createAppController({ mountNode }) {
       ? {
           file_id: normalized.file_id || null,
           file_url: normalized.file_url || null,
-          file_name: normalized.file_name || "鏂囨。",
+          file_name: normalized.file_name || "文档",
           file_type: normalized.file_type || "",
           content_hash: normalized.content_hash,
           source_origin: normalized.source_origin || null,

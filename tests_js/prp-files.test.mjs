@@ -51,6 +51,38 @@ test("PRP file page accepts PDF, image and DOCX metadata", () => {
   assert.equal(result.items.length, 3);
 });
 
+test("PRP file page preserves an empty-list message and accepts unknown times", () => {
+  const result = prpFiles.normalizePRPFilePage({
+    items: [{
+      id: "generated-1",
+      name: "实时生成",
+      media_type: "application/pdf",
+      size: null,
+      sha256: null,
+      created_at: null,
+      expires_at: null,
+      last_downloaded_at: null,
+    }],
+    page: 1,
+    page_size: 20,
+    total: 1,
+    message: "Success",
+  });
+
+  assert.equal(result.message, "Success");
+  assert.equal(result.items[0].created_at, null);
+  assert.equal(result.items[0].expires_at, null);
+});
+
+test("empty PRP file lists use the provider message and service errors use a generic placeholder", () => {
+  assert.equal(
+    prpFiles.getFileListPlaceholder({ items: [], message: "暂无简历，请前往丽娃云聘系统创建并发布自己的简历。" }),
+    "暂无简历，请前往丽娃云聘系统创建并发布自己的简历。",
+  );
+  assert.equal(prpFiles.getFileListPlaceholder({ items: [], message: "Success" }), "暂无文件");
+  assert.equal(prpFiles.getFileListPlaceholder({ items: [], error: "服务异常" }), "服务异常");
+});
+
 test("large listed files are blocked before a download request starts", () => {
   assert.equal(prpFiles.exceedsLocalFileSize({ size: 15 * 1024 * 1024 }, 5 * 1024 * 1024), true);
   assert.equal(prpFiles.exceedsLocalFileSize({ size: 5 * 1024 * 1024 }, 5 * 1024 * 1024), false);

@@ -27,6 +27,8 @@
 }
 
 .files-header h1 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   color: var(--ui-text);
   font: 700 48px/1.3 var(--ui-font-bold);
@@ -58,11 +60,12 @@
   white-space: nowrap;
 }
 
+/* 标签在左上下居中；右侧来源按钮可换行，避免“文件来源”单独占一行。 */
 .files-source-switch {
   display: flex;
-  min-height: 104px;
+  flex-direction: row;
   align-items: center;
-  gap: 22px;
+  gap: 20px;
   margin-top: 28px;
   padding: 18px 22px;
   border: 1px solid rgba(117, 126, 190, 0.16);
@@ -73,19 +76,20 @@
 
 .files-source-label {
   flex: 0 0 auto;
+  align-self: center;
   color: #687194;
-  font: 700 22px/1.2 var(--ui-font-bold);
+  font: 700 26px/1.2 var(--ui-font-bold);
   white-space: nowrap;
 }
 
 .provider-tabs {
   display: flex;
-  min-width: 0;
   flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
   gap: 12px;
-  overflow-x: auto;
   padding: 2px;
-  scrollbar-width: thin;
 }
 
 .provider-tab {
@@ -190,6 +194,10 @@
 
 .files-header .files-refresh {
   flex: 0 0 154px;
+  width: 154px;
+  height: 72px;
+  min-width: 154px;
+  min-height: 72px;
   align-self: center;
 }
 
@@ -215,6 +223,19 @@
   min-height: 0;
   overflow: hidden;
   padding-top: 16px;
+}
+
+.files-list-placeholder {
+  display: flex;
+  grid-column: 1;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--ui-muted);
+  font: 400 24px/1.6 var(--ui-font-regular);
+  text-align: center;
+  white-space: pre-wrap;
 }
 
 .files-item {
@@ -319,19 +340,41 @@
 }
 
 .files-action-region {
-  top: 1700px;
+  top: 1636px;
   left: 80px;
   width: 920px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
+}
+
+.files-session-hint {
+  margin: 0;
+  min-height: 32px;
+  color: #7b83a5;
+  font: 400 22px/1.4 var(--ui-font-regular);
+  text-align: center;
+}
+
+.files-session-hint[hidden] {
+  display: none;
 }
 
 .files-action-region--single {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
+/* 底栏是纵向 flex：不能用 --ui-action-width 做 flex-basis，否则会把高度撑成 418px。 */
 .files-exit {
-  width: 418px;
-  height: 110px;
-  flex: 0 0 var(--ui-action-width);
+  box-sizing: border-box;
+  width: var(--ui-action-width);
+  height: var(--ui-action-height);
+  min-width: var(--ui-action-width);
+  max-width: var(--ui-action-width);
+  min-height: var(--ui-action-height);
+  max-height: var(--ui-action-height);
+  flex: 0 0 auto;
   margin: 0;
 }
 
