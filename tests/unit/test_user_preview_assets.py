@@ -115,8 +115,10 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertNotIn('id="filesTotal"', files_view)
         self.assertNotIn('>鍙墦鍗版枃浠?', files_view)
         self.assertIn(".files-action-region--single", files_css)
-        self.assertIn("width: 418px", files_css)
-        self.assertIn("height: 110px", files_css)
+        self.assertIn("width: var(--ui-action-width)", files_css)
+        self.assertIn("height: var(--ui-action-height)", files_css)
+        self.assertIn("flex: 0 0 auto", files_css)
+        self.assertNotIn("flex: 0 0 var(--ui-action-width)", files_css)
 
     def test_countdown_and_action_css_are_centered_and_animated(self):
         common_css = read_source(BASE_DIR / "css/common.css")
@@ -155,6 +157,11 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertRegex(files_css, r"\.files-pager\s*\{[^}]*position:\s*absolute[^}]*top:\s*1550px")
         self.assertRegex(files_css, r"\.files-header[^}]*position:\s*relative")
         self.assertIn("files-header .files-refresh", files_css)
+        self.assertRegex(
+            files_css,
+            r"\.files-source-switch\s*\{[^}]*flex-direction:\s*row[^}]*align-items:\s*center",
+        )
+        self.assertIn("flex-wrap: wrap", files_css)
 
     def test_done_refresh_detection_is_hidden_outside_fault_or_unconfirmed_states(self):
         common_css = read_source(BASE_DIR / "css/common.css")
@@ -411,8 +418,7 @@ class UserPreviewAssetTests(unittest.TestCase):
             preview_view,
             r"function\s+queuePreviewRefresh\(\)[\s\S]*?setPreviewControlsLocked\(true\);[\s\S]*?pausePreviewCountdown\(\);",
         )
-        self.assertIn("await renderPreview(previewCurrentPage - 1, false)", preview_view)
-        self.assertIn("await renderPreview(previewCurrentPage + 1, false)", preview_view)
+        self.assertIn("await renderPreview(nextPage, false)", preview_view)
         self.assertIn("resumePreviewCountdown(true)", preview_view)
 
     def test_done_actions_use_loading_lock_without_changing_business_failure_lock(self):
@@ -610,7 +616,8 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn("enterPreviewFailureMode", preview_view)
         self.assertIn("startCountdown(10", preview_view)
         self.assertNotIn("秒后重试", preview_view)
-        self.assertIn("文件列表获取失败：${reason}", files_view)
+        self.assertIn('state.listError = "服务异常"', files_view)
+        self.assertIn("files-list-placeholder", files_view)
         self.assertNotIn('error.message || "文件读取失败，请稍后重试。"', files_view)
 
     def test_prp_files_view_has_terminal_navigation_and_countdown(self):
@@ -618,6 +625,9 @@ class UserPreviewAssetTests(unittest.TestCase):
 
         self.assertIn('id="filesCountdown"', files_view)
         self.assertIn('id="filesExit"', files_view)
+        self.assertIn('id="filesSessionHint"', files_view)
+        self.assertIn("临时文件将在退出登录后清除", files_view)
+        self.assertNotIn('id="filesSourceHint"', files_view)
         self.assertIn('aria-live="polite"', files_view)
         self.assertIn("createMainCountdown", files_view)
         self.assertIn("await restartCycle()", files_view)
@@ -703,6 +713,69 @@ class UserPreviewAssetTests(unittest.TestCase):
         self.assertIn(".files-countdown", files_css)
         self.assertRegex(files_css, r"\.files-countdown\s*\{[^}]*width:\s*51px[^}]*height:\s*51px")
         self.assertIn("preview__Ellipse_97_448.png", files_css)
+
+    def test_preview_title_and_icon_share_one_centered_row(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        preview_css = read_source(BASE_DIR / "css/preview.css")
+        runtime = read_source(BASE_DIR / "modules/shared/runtime.js")
+
+        self.assertIn('id="preview-title-row"', preview_view)
+        self.assertIn('id="97_474"', preview_view)
+        self.assertIn('id="97_473"', preview_view)
+        self.assertIn("打印预览", runtime)
+        self.assertRegex(
+            preview_css,
+            r"\.preview-title-row\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*center",
+        )
+        self.assertRegex(
+            preview_css,
+            r"\.Pixso-group-97_454\s*\{[^}]*top:\s*1700px",
+        )
+        self.assertRegex(
+            preview_css,
+            r"\.Pixso-group-97_460\s*\{[^}]*top:\s*1699px",
+        )
+        self.assertIn("top: 1288px !important", preview_css)
+        self.assertNotIn("top: 1180px !important", preview_css)
+        self.assertIn("top: 152px", preview_css)
+        self.assertIn("flex: 0 0 210px", preview_css)
+        self.assertIn("grid-column: auto", preview_css)
+        self.assertIn("width: 867px !important", preview_css)
+        self.assertIn("width: 418px !important", preview_css)
+        self.assertIn("grid-template-columns: 418px 418px", preview_css)
+        self.assertIn("width: 600px", preview_css)
+        self.assertIn("height: 800px", preview_css)
+        self.assertIn("width: 900px", preview_css)
+        self.assertIn("height: 560px", preview_css)
+        self.assertIn("top: 421px", preview_css)
+        self.assertIn("preview-option-card--color", preview_css)
+
+    def test_preview_lightbox_keeps_paper_aspect_and_is_not_a_back_navigation(self):
+        preview_view = read_source(BASE_DIR / "modules/views/preview-view.js")
+        preview_css = read_source(BASE_DIR / "css/preview.css")
+
+        self.assertIn("openPreviewLightbox", preview_view)
+        self.assertIn("closePreviewLightbox", preview_view)
+        self.assertIn('on("preview-lightbox-scrim"', preview_view)
+        self.assertIn("preview-lightbox-body", preview_view)
+        self.assertLess(
+            preview_view.index("preview-lightbox-prev"),
+            preview_view.index('id="preview-lightbox-stage"'),
+        )
+        self.assertGreater(
+            preview_view.index("preview-lightbox-next"),
+            preview_view.index('id="preview-lightbox-stage"'),
+        )
+        self.assertNotIn("returnToFiles()", preview_view.split("function closePreviewLightbox", 1)[1].split("function openPreviewLightbox", 1)[0])
+        self.assertIn("aspect-ratio: 441 / 646", preview_css)
+        self.assertIn("aspect-ratio: 646 / 441", preview_css)
+        self.assertIn(".preview-lightbox.is-portrait .preview-lightbox-stage", preview_css)
+        self.assertIn(".preview-lightbox.is-landscape .preview-lightbox-stage", preview_css)
+        self.assertIn(".preview-lightbox-body", preview_css)
+        self.assertIn("width: 720px", preview_css)
+        self.assertIn("height: 1056px", preview_css)
+        self.assertIn("width: 800px", preview_css)
+        self.assertIn("height: 546px", preview_css)
 
     def test_removed_legacy_pages_do_not_reintroduce_duplicate_frontend_logic(self):
         self.assertFalse((BASE_DIR / "main.js").exists())

@@ -892,17 +892,19 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   position: relative !important;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: auto !important;
-  height: auto !important;
+  justify-content: flex-start;
+  gap: 16px;
+  width: 100% !important;
+  height: 100% !important;
   min-width: 0;
-  padding: 18px 24px;
+  box-sizing: border-box;
+  padding: 16px 22px;
   border-radius: 20px;
   background: #ffffff;
 }
 
 .preview-option-card--color {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .preview-option-label {
@@ -1008,16 +1010,14 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   right: calc(50% - 399px);
 }
 
-.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_481 {
-  top: 958px;
+.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_481,
+.Pixso-frame-55_77.is-portrait .Pixso-paragraph-97_481 {
+  top: 1068px;
 }
 
-.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_480 {
-  top: 1012px;
-}
-
-.Pixso-frame-55_77.is-landscape .preview-options-panel {
-  top: 1160px !important;
+.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_480,
+.Pixso-frame-55_77.is-portrait .Pixso-paragraph-97_480 {
+  top: 1118px;
 }
 
 .Pixso-frame-55_77.is-landscape .preview-options-panel,
@@ -1070,4 +1070,354 @@ background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAY
   letter-spacing: -0.02em;
 }
 
+/* 标题在身份条底边下方；预览框+文件名+页码作为整体，居中在标题底与参数组顶之间。
+   参数列宽对齐底部「返回/立刻打印」(418 + 31 + 418)。返回/立刻打印位置不动。 */
+.preview-title-row {
+  position: absolute;
+  left: 50%;
+  top: 152px;
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 
+.preview-title-row .Pixso-vector-97_474,
+.Pixso-frame-55_77 .preview-title-row .Pixso-vector-97_474 {
+  position: static;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  transform: none;
+  background-size: contain;
+  background-position: center;
+}
+
+.preview-title-row .Pixso-paragraph-97_473,
+.Pixso-frame-55_77 .preview-title-row .Pixso-paragraph-97_473 {
+  position: static;
+  left: auto;
+  top: auto;
+  width: auto;
+  height: auto;
+  font-size: 46px;
+  line-height: 1;
+  transform: none;
+  white-space: nowrap;
+}
+
+.Pixso-rectangle-115_58 {
+  cursor: pointer;
+}
+
+/* 文件名/页码：系统字体兜底，避免自定义字体名失败时中文变成问号。 */
+.Pixso-frame-55_77 .Pixso-paragraph-97_481,
+.Pixso-frame-55_77 .Pixso-paragraph-97_480 {
+  font-family: "Microsoft YaHei-Regular", "Microsoft YaHei", "微软雅黑", sans-serif;
+  width: min(820px, calc(100% - 96px));
+  max-width: min(820px, calc(100% - 96px));
+  letter-spacing: 0.02em;
+}
+
+.Pixso-frame-55_77 .Pixso-paragraph-97_480 {
+  opacity: 0.72;
+}
+
+/* 标题底约 204px，参数组顶 1288px，中间可放区高度 1084px。
+   竖版单元约 800+90=890 → top≈(204+(1084-890)/2)=301
+   横版单元约 560+90=650 → top≈(204+(1084-650)/2)=421 */
+.Pixso-frame-55_77.is-portrait .Pixso-rectangle-115_56 {
+  width: 600px;
+  height: 800px;
+  top: 301px;
+  transform: translateX(-50%);
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-group-115_57 {
+  width: 556px;
+  height: 756px;
+  top: 323px;
+  transform: translateX(-50%);
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-rectangle-115_58,
+.Pixso-frame-55_77.is-portrait .Pixso-rectangle-115_59 {
+  width: 556px;
+  height: 756px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-rectangle-115_56 {
+  width: 900px;
+  height: 560px;
+  top: 421px;
+  transform: translateX(-50%);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-group-115_57 {
+  width: 856px;
+  height: 516px;
+  top: 443px;
+  transform: translateX(-50%);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-rectangle-115_58,
+.Pixso-frame-55_77.is-landscape .Pixso-rectangle-115_59 {
+  width: 856px;
+  height: 516px;
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-button-115_61,
+.Pixso-frame-55_77.is-portrait .Pixso-button-115_62 {
+  top: 701px;
+  transform: translateY(-50%);
+  background: rgba(28, 36, 64, 0.42);
+  box-shadow: 0 6px 18px rgba(28, 36, 64, 0.18);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-button-115_61,
+.Pixso-frame-55_77.is-landscape .Pixso-button-115_62 {
+  top: 701px;
+  transform: translateY(-50%);
+  background: rgba(28, 36, 64, 0.42);
+  box-shadow: 0 6px 18px rgba(28, 36, 64, 0.18);
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-button-115_61 {
+  left: calc(50% - 392px);
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-button-115_62 {
+  right: calc(50% - 392px);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-button-115_61 {
+  left: calc(50% - 542px);
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-button-115_62 {
+  right: calc(50% - 542px);
+}
+
+/* 文件名/页码紧贴对应方向预览框底部，与预览组成一个居中整体。 */
+.Pixso-frame-55_77.is-portrait .Pixso-paragraph-97_481 {
+  top: 1120px;
+}
+
+.Pixso-frame-55_77.is-portrait .Pixso-paragraph-97_480 {
+  top: 1170px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_481 {
+  top: 1000px;
+}
+
+.Pixso-frame-55_77.is-landscape .Pixso-paragraph-97_480 {
+  top: 1050px;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-options-panel,
+.Pixso-frame-55_77.is-landscape .preview-options-panel {
+  top: 1288px !important;
+  /* 与底部双按钮同宽：418 + 31 + 418 */
+  width: 867px !important;
+  left: 107px !important;
+  grid-template-columns: 418px 418px;
+  grid-template-rows: repeat(3, 118px);
+  column-gap: 31px;
+  row-gap: 14px;
+  height: 382px !important;
+  padding: 0;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-card,
+.Pixso-frame-55_77.is-landscape .preview-option-card {
+  width: 418px !important;
+  height: 100% !important;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid rgba(228, 230, 241, 0.95);
+  box-shadow: 0 8px 20px rgba(88, 95, 153, 0.06);
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-choices,
+.Pixso-frame-55_77.is-portrait .preview-copies-control,
+.Pixso-frame-55_77.is-landscape .preview-option-choices,
+.Pixso-frame-55_77.is-landscape .preview-copies-control {
+  margin-left: auto;
+  flex: 0 0 210px;
+  width: 210px;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-card--color,
+.Pixso-frame-55_77.is-landscape .preview-option-card--color {
+  grid-column: auto;
+  width: 418px !important;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-card--color .preview-option-choices,
+.Pixso-frame-55_77.is-landscape .preview-option-card--color .preview-option-choices {
+  margin-left: auto;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-label,
+.Pixso-frame-55_77.is-landscape .preview-option-label {
+  flex: 0 0 auto;
+  min-width: 4.5em;
+  font-size: 28px !important;
+  font-family: "Microsoft YaHei-Regular", "Microsoft YaHei", "微软雅黑", sans-serif !important;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-choice-button,
+.Pixso-frame-55_77.is-landscape .preview-choice-button {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: 72px;
+  padding: 0 10px;
+  border-radius: 14px;
+  font: 400 26px/1 "Microsoft YaHei-Regular", "Microsoft YaHei", "微软雅黑", sans-serif;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-step-button,
+.Pixso-frame-55_77.is-landscape .preview-step-button {
+  flex: 0 0 60px;
+  min-width: 60px;
+  width: 60px;
+  font-size: 34px;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-copies-value,
+.Pixso-frame-55_77.is-landscape .preview-copies-value,
+.Pixso-frame-55_77.is-portrait .preview-option-card--scale .preview-copies-value,
+.Pixso-frame-55_77.is-landscape .preview-option-card--scale .preview-copies-value {
+  flex: 1 1 auto;
+  width: auto;
+  font-size: 28px;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-card--scale .preview-copies-control,
+.Pixso-frame-55_77.is-landscape .preview-option-card--scale .preview-copies-control {
+  flex: 0 0 210px;
+  width: 210px;
+  margin-left: auto;
+}
+
+.Pixso-frame-55_77.is-portrait .preview-option-card--scale .preview-step-button,
+.Pixso-frame-55_77.is-landscape .preview-option-card--scale .preview-step-button {
+  flex: 0 0 60px;
+  min-width: 60px;
+  width: 60px;
+  font-size: 34px;
+}
+
+.Pixso-group-97_454 {
+  top: 1700px;
+}
+
+.Pixso-group-97_460 {
+  top: 1699px;
+}
+
+.preview-lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-lightbox[hidden] {
+  display: none;
+}
+
+.preview-lightbox-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(18, 24, 42, 0.52);
+  cursor: pointer;
+}
+
+.preview-lightbox-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  max-width: calc(100% - 48px);
+  pointer-events: none;
+}
+
+.preview-lightbox-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(28, 36, 64, 0.28);
+  pointer-events: auto;
+}
+
+/* 放大弹窗按纸张方向等比放大，禁止横向撑满导致竖向变矮。 */
+.preview-lightbox.is-portrait .preview-lightbox-stage {
+  width: 720px;
+  height: 1056px;
+  aspect-ratio: 441 / 646;
+}
+
+.preview-lightbox.is-landscape .preview-lightbox-stage {
+  width: 800px;
+  height: 546px;
+  aspect-ratio: 646 / 441;
+}
+
+.preview-lightbox-page {
+  position: absolute;
+  inset: 0;
+  background-color: #ffffff;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  pointer-events: none;
+}
+
+/* 翻页按钮在预览框外侧，不压在页面内容上。 */
+.preview-lightbox-nav {
+  position: static;
+  flex: 0 0 88px;
+  width: 88px;
+  height: 88px;
+  border: 0;
+  border-radius: 44px;
+  background: rgba(28, 36, 64, 0.58);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 62px;
+  line-height: 1;
+  transform: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.preview-lightbox-nav--prev,
+.preview-lightbox-nav--next {
+  left: auto;
+  right: auto;
+}
+
+.preview-lightbox-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

@@ -90,17 +90,29 @@ export function renderPreviewView() {
           </div>
         </section>
       </div>
-      <p id="97_480" class="Pixso-paragraph-97_480">-0/0页-</p>
+      <p id="97_480" class="Pixso-paragraph-97_480">0 / 0 页</p>
       <p id="97_481" class="Pixso-paragraph-97_481">文档加载中...</p>
-      <p id="97_473" class="Pixso-paragraph-97_473"></p>
-      <div id="97_474" class="Pixso-vector-97_474"></div>
+      <div id="preview-title-row" class="preview-title-row">
+        <div id="97_474" class="Pixso-vector-97_474" aria-hidden="true"></div>
+        <p id="97_473" class="Pixso-paragraph-97_473"></p>
+      </div>
       <div id="115_56" class="Pixso-rectangle-115_56"></div>
       <div id="115_57" class="Pixso-group-115_57">
-        <div id="115_58" class="Pixso-rectangle-115_58"><div id="preview-document-layer" aria-hidden="true"></div></div>
+        <div id="115_58" class="Pixso-rectangle-115_58" role="button" tabindex="0" aria-label="放大预览"><div id="preview-document-layer" aria-hidden="true"></div></div>
         <div id="115_59" class="Pixso-rectangle-115_59"></div>
       </div>
       <button id="115_61" class="Pixso-button-115_61" type="button" aria-label="上一页">&#8249;</button>
       <button id="115_62" class="Pixso-button-115_62" type="button" aria-label="下一页">&#8250;</button>
+      <div id="preview-lightbox" class="preview-lightbox" hidden>
+        <button id="preview-lightbox-scrim" class="preview-lightbox-scrim" type="button" aria-label="关闭放大预览"></button>
+        <div class="preview-lightbox-body">
+          <button id="preview-lightbox-prev" class="preview-lightbox-nav preview-lightbox-nav--prev" type="button" aria-label="上一页">&#8249;</button>
+          <div id="preview-lightbox-stage" class="preview-lightbox-stage">
+            <div id="preview-lightbox-page" class="preview-lightbox-page"></div>
+          </div>
+          <button id="preview-lightbox-next" class="preview-lightbox-nav preview-lightbox-nav--next" type="button" aria-label="下一页">&#8250;</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -168,9 +180,51 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     placeholder.classList.toggle("is-hidden", !visible);
   }
 
+  function previewLightbox() {
+    return q("preview-lightbox");
+  }
+
+  function syncPreviewLightboxPage() {
+    const source = q("preview-document-layer");
+    const target = q("preview-lightbox-page");
+    if (!source || !target) return;
+    target.style.backgroundImage = source.style.backgroundImage || "";
+    target.style.backgroundSize = "contain";
+    target.style.backgroundPosition = "center";
+    target.style.backgroundRepeat = "no-repeat";
+    target.style.backgroundColor = "#ffffff";
+  }
+
+  function syncPreviewLightboxOrientation() {
+    const lightbox = previewLightbox();
+    const frame = q("55_77");
+    if (!lightbox || !frame) return;
+    const landscape = frame.classList.contains("is-landscape");
+    lightbox.classList.toggle("is-landscape", landscape);
+    lightbox.classList.toggle("is-portrait", !landscape);
+  }
+
+  function closePreviewLightbox() {
+    const lightbox = previewLightbox();
+    if (!lightbox) return;
+    lightbox.hidden = true;
+  }
+
+  function openPreviewLightbox() {
+    if (!previewFirstLoadDone || previewControlsLocked || previewLoading || previewFailureMode || printSubmitting) return;
+    const lightbox = previewLightbox();
+    if (!lightbox) return;
+    syncPreviewLightboxOrientation();
+    syncPreviewLightboxPage();
+    lightbox.hidden = false;
+    updatePreviewPageButtons();
+  }
+
   function updatePreviewPageButtons() {
     const prevBtn = q("115_61");
     const nextBtn = q("115_62");
+    const lightboxPrev = q("preview-lightbox-prev");
+    const lightboxNext = q("preview-lightbox-next");
     if (!prevBtn || !nextBtn) return;
     const enabled =
       previewFirstLoadDone &&
@@ -183,6 +237,8 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
       previewPageCount > 1;
     prevBtn.disabled = !enabled || previewCurrentPage <= 0;
     nextBtn.disabled = !enabled || previewCurrentPage >= previewPageCount - 1;
+    if (lightboxPrev) lightboxPrev.disabled = !enabled || previewCurrentPage <= 0;
+    if (lightboxNext) lightboxNext.disabled = !enabled || previewCurrentPage >= previewPageCount - 1;
     updatePrintButtonState();
   }
 
@@ -224,6 +280,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     setText(["97_481"], "\u9884\u89c8\u52a0\u8f7d\u5931\u8d25");
     setText(["97_480"], `-${errorMessage || "\u8bf7\u7a0d\u540e\u91cd\u8bd5"}-`);
     setPreviewLoadingPlaceholder(true);
+    closePreviewLightbox();
     setPreviewControlsLocked(true, true);
     startCountdown(10, retryAction);
   }
@@ -255,6 +312,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
     const orientation = normalizeOrientation(session.options?.orientation);
     session.options.orientation = orientation;
     setPreviewOrientation(orientation);
+    syncPreviewLightboxOrientation();
     setChoiceVisual("preview-orientation-portrait", { active: orientation === "portrait" });
     setChoiceVisual("preview-orientation-landscape", { active: orientation === "landscape" });
 
@@ -322,8 +380,9 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
       previewCurrentPage = session.file.page_index;
       previewPageCount = session.file.page_count;
       setText(["97_481"], session.file.file_name || "文档");
-      setText(["97_480"], `-${previewCurrentPage + 1}/${previewPageCount}页-`);
+      setText(["97_480"], `${previewCurrentPage + 1} / ${previewPageCount} 页`);
       setPreviewBg("115_58", response.preview_url);
+      syncPreviewLightboxPage();
       setPreviewLoadingPlaceholder(false);
 
       previewFailureMode = false;
@@ -394,7 +453,7 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
 
   setPreviewCountdownDisplay(60);
   setText(["97_481"], "文档加载中...");
-  setText(["97_480"], "-0/0页-");
+  setText(["97_480"], "0 / 0 页");
   setPreviewLoadingPlaceholder(true);
 
   on("97_454", () => {
@@ -461,16 +520,20 @@ export function bindPreviewViewEvents({ appState, router, queuePrintRequest, res
   on("133_35", () => pickColor("color"));
   on("133_36", () => pickColor("mono"));
 
-  on("115_61", async () => {
-    if (!previewFirstLoadDone || previewControlsLocked || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode || previewCurrentPage <= 0) return;
-    const ok = await renderPreview(previewCurrentPage - 1, false);
+  async function turnPreviewPage(delta) {
+    const nextPage = previewCurrentPage + delta;
+    if (!previewFirstLoadDone || previewControlsLocked || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode) return;
+    if (nextPage < 0 || nextPage >= previewPageCount) return;
+    const ok = await renderPreview(nextPage, false);
     if (ok) resumePreviewCountdown(true);
-  });
-  on("115_62", async () => {
-    if (!previewFirstLoadDone || previewControlsLocked || previewLoading || previewRefreshTimer || prpReturnInFlight || printSubmitting || previewFailureMode || previewCurrentPage >= previewPageCount - 1) return;
-    const ok = await renderPreview(previewCurrentPage + 1, false);
-    if (ok) resumePreviewCountdown(true);
-  });
+  }
+
+  on("115_61", () => void turnPreviewPage(-1));
+  on("115_62", () => void turnPreviewPage(1));
+  on("115_58", () => openPreviewLightbox());
+  on("preview-lightbox-scrim", () => closePreviewLightbox());
+  on("preview-lightbox-prev", () => void turnPreviewPage(-1));
+  on("preview-lightbox-next", () => void turnPreviewPage(1));
   on("97_460", () => {
     if (
       !previewFirstLoadDone ||
