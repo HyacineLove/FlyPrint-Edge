@@ -198,7 +198,8 @@ async def startup_event():
     start_result = cloud_service.start()
     if start_result.get("success"):
         node_id = start_result.get("node_id")
-        logger.info(f" Cloud service startup result: {start_result.get('message')}, node_id={node_id}")
+        build_version = getattr(getattr(getattr(cloud_service, "api_client", None), "edge_info", None), "version", "unknown")
+        logger.info(f" Cloud service startup result: {start_result.get('message')}, node_id={node_id}, edge_version={build_version}")
         # Sessions are intentionally memory-only on Edge. A restart must make
         # Cloud hold any ticket-bound work instead of dispatching it blindly.
         _report_terminal_session_state(None)
@@ -227,6 +228,31 @@ async def broadcast_sse_event(event_type: str, data: Dict[str, Any]):
         logger.error(f" 广播SSE事件失败: {e}")
 
 
+def _end_portal_file_session(session_id: Optional[str] = None) -> None:
+    """Best-effort: ask Site Portal to delete this session's official uploads."""
+    try:
+        context = None
+        if session_id:
+            context = portal_session_manager.get_access_context(session_id)
+        else:
+            snapshot = portal_session_manager.snapshot()
+            if snapshot.get("active"):
+                context = portal_session_manager.get_access_context(snapshot.get("terminal_session_id"))
+        if not context:
+            logger.warning("Site Portal 会话结束跳过: session_id=%s reason=no_access_context", session_id or "-")
+            return
+        logger.info("Site Portal 会话结束请求: session_id=%s portal=%s", session_id or "-", context["portal_base_url"])
+        status_code = site_portal_client.end_session(context["portal_base_url"], context["file_session_token"])
+        logger.info("Site Portal 会话结束响应: session_id=%s status=%s", session_id or "-", status_code)
+    except Exception as exc:
+        logger.warning("结束 Site Portal 会话文件失败: session_id=%s error=%s", session_id or "-", exc)
+
+
+def _clear_portal_session(session_id: Optional[str] = None) -> None:
+    _end_portal_file_session(session_id)
+    portal_session_manager.clear(session_id)
+
+
 def _clear_interactive_resources_for_cloud_unbind() -> None:
     """Clear the local user session after an administrator unbinds the Edge."""
     active = interactive_session_manager.get_active_session() or {}
@@ -234,12 +260,12 @@ def _clear_interactive_resources_for_cloud_unbind() -> None:
     if session_id:
         interactive_session_manager.clear_session(session_id)
         prp_file_selection_manager.clear_session(session_id)
-        portal_session_manager.clear(session_id)
+        _clear_portal_session(session_id)
         file_mgr = get_file_manager()
         if file_mgr:
             file_mgr.release_preview_session(session_id, reason="cloud_unbind")
     else:
-        portal_session_manager.clear()
+        _clear_portal_session()
 
 
 def _normalize_ops_contacts_payload(raw) -> list:
@@ -453,7 +479,7 @@ async def shutdown_event():
     active_session_id = active.get("session_id") if active else None
     if active:
         prp_file_selection_manager.clear_session(active["session_id"])
-    portal_session_manager.clear()
+    _clear_portal_session()
     shutdown_portal_executor()
     
     # 停止文件管理器
@@ -931,7 +957,7 @@ async def get_qr_code():
             file_mgr = get_file_manager()
             if file_mgr:
                 file_mgr.release_preview_session(previous_session_id, reason="new_session")
-        portal_session_manager.clear()
+        _clear_portal_session()
         session = interactive_session_manager.start_session()
         _report_terminal_session_state(session)
 
@@ -1154,7 +1180,7 @@ async def get_current_interactive_session():
         session_id = active.get("session_id")
         interactive_session_manager.clear_session(session_id)
         prp_file_selection_manager.clear_session(session_id)
-        portal_session_manager.clear(session_id)
+        _clear_portal_session(session_id)
         file_mgr = get_file_manager()
         if file_mgr:
             file_mgr.release_preview_session(session_id, reason="portal_session_expired")
@@ -1579,14 +1605,16 @@ async def cleanup_preview_file(request: Request):
         body = await request.json()
         file_id = body.get("file_id")
         session_id = body.get("session_id")
+        logger.info("收到会话清理请求: session_id=%s file_id=%s", session_id or "-", file_id or "-")
         
         if not file_id and not session_id:
             return JSONResponse(status_code=400, content={"success": False, "message": "file_id 或 session_id 不能为空"})
         if session_id and not interactive_session_manager.clear_session(session_id):
+            logger.warning("会话清理拒绝: session_id=%s reason=interactive_session_invalid", session_id)
             return JSONResponse(status_code=409, content={"success": False, "message": "当前会话已失效，请重新扫码"})
         if session_id:
             prp_file_selection_manager.clear_session(session_id)
-            portal_session_manager.clear(session_id)
+            _clear_portal_session(session_id)
             _report_terminal_session_state(None)
         
         # 通过文件管理器清理
@@ -1597,6 +1625,7 @@ async def cleanup_preview_file(request: Request):
             elif file_id:
                 file_mgr.release_preview_resource(file_id, reason="cancel")
         
+        logger.info("会话清理完成: session_id=%s file_id=%s", session_id or "-", file_id or "-")
         return {"success": True, "message": "文件已清理"}
         
     except Exception as e:

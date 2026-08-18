@@ -88,3 +88,23 @@ class SitePortalClient:
         if payload.get("access_token"):
             raise SitePortalProtocolError("领取响应不得包含 SSO 访问令牌")
         return dict(payload)
+
+    def end_session(self, portal_base_url: str, file_session_token: str) -> int:
+        raw = str(portal_base_url or "").strip().rstrip("/")
+        parsed = urlparse(raw)
+        token = str(file_session_token or "").strip()
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password or not token:
+            raise SitePortalProtocolError("Site Portal 会话结束地址无效")
+        try:
+            response = self._session.post(
+                raw + "/api/session/end",
+                headers={"Authorization": f"Bearer {token}"},
+                verify=self.verify_ssl,
+                timeout=self._timeout,
+                allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise SitePortalProtocolError("Site Portal 结束会话失败") from exc
+        if response.status_code not in {204, 401}:
+            raise SitePortalProtocolError(f"Site Portal 拒绝结束会话: HTTP {response.status_code}")
+        return response.status_code

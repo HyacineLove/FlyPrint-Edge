@@ -113,6 +113,16 @@ class SitePortalClientTests(unittest.TestCase):
 
         self.assertEqual([], session.calls)
 
+    def test_end_session_posts_bearer_token_and_accepts_no_content(self):
+        session = FakeSession(FakeResponse(status_code=204))
+        client = SitePortalClient(session=session)
+
+        client.end_session("https://portal.example.test", "portal-file-session")
+
+        self.assertEqual("https://portal.example.test/api/session/end", session.calls[0][0])
+        self.assertEqual("Bearer portal-file-session", session.calls[0][1]["headers"]["Authorization"])
+        self.assertFalse(session.calls[0][1]["allow_redirects"])
+
 
 if __name__ == "__main__":
     unittest.main()
