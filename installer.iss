@@ -6,7 +6,7 @@
 #define MyLauncherExeName "flyprint-launcher.exe"
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.71"
+  #define MyAppVersion "1.0.72"
 #endif
 
 [Setup]
@@ -24,9 +24,31 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 UninstallDisplayName={#MyAppName}
-CloseApplications=yes
-CloseApplicationsFilter=*.exe,*.dll,*.pyd
+; The launcher performs an exact, FlyPrint-only shutdown before files are replaced.
+; Do not let Restart Manager close unrelated executables or browser processes.
+CloseApplications=no
 RestartApplications=no
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  LauncherPath: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  LauncherPath := ExpandConstant('{app}\{#MyLauncherExeName}');
+  if not FileExists(LauncherPath) then
+    Exit;
+
+  if not Exec(LauncherPath, '--exit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Result := '无法停止 FlyPrint Edge。请关闭 FlyPrint Edge 后重试。';
+    Exit;
+  end;
+
+  if ResultCode <> 0 then
+    Result := 'FlyPrint Edge 未能正常停止。请关闭 FlyPrint Edge 后重试。';
+end;
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
