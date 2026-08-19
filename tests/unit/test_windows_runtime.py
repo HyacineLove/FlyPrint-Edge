@@ -114,6 +114,49 @@ class LauncherHelpersTests(unittest.TestCase):
             launcher.ACTION_OPEN_ADMIN,
         )
 
+    def test_exit_control_command_waits_for_full_runtime_shutdown(self):
+        class DelayedShutdownConnection:
+            def __init__(self, initial_timeout):
+                self.timeout = initial_timeout
+                self.sent = b""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def settimeout(self, timeout):
+                self.timeout = timeout
+
+            def sendall(self, payload):
+                self.sent = payload
+
+            def recv(self, _size):
+                if self.timeout < 10:
+                    raise launcher.socket.timeout("runtime is still shutting down")
+                return b"ok"
+
+        connections = []
+
+        def connect(_address, timeout):
+            connection = DelayedShutdownConnection(timeout)
+            connections.append(connection)
+            return connection
+
+        with (
+            patch("launcher.socket.create_connection", side_effect=connect),
+            patch("launcher.time.sleep"),
+        ):
+            sent = launcher.send_control_command(launcher.ACTION_EXIT)
+
+        self.assertTrue(sent)
+        self.assertEqual(len(connections), 1)
+        self.assertEqual(
+            connections[0].timeout, launcher.EXIT_COMMAND_RESPONSE_TIMEOUT_SEC
+        )
+        self.assertEqual(connections[0].sent, launcher.ACTION_EXIT.encode("utf-8"))
+
     def test_unactivated_terminal_opens_admin_even_for_default_user_action(self):
         self.assertEqual(
             launcher.resolve_page_mode(launcher.ACTION_OPEN_USER, {"cloud": {}}),

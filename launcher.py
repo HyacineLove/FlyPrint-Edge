@@ -28,6 +28,9 @@ CONTROL_HOST = "127.0.0.1"
 CONTROL_PORT = 18761
 SERVICE_READY_TIMEOUT_SEC = 20
 SERVICE_POLL_INTERVAL_SEC = 0.5
+CONTROL_CONNECT_TIMEOUT_SEC = 1.5
+# 退出会依次等待专用浏览器和服务进程终止，不能沿用普通控制命令的短超时。
+EXIT_COMMAND_RESPONSE_TIMEOUT_SEC = 25.0
 SINGLE_INSTANCE_MUTEX = r"Global\FlyPrintEdgeLauncher"
 
 
@@ -218,7 +221,11 @@ class CommandServer(socketserver.ThreadingTCPServer):
 def send_control_command(action: str) -> bool:
     for _ in range(5):
         try:
-            with socket.create_connection((CONTROL_HOST, CONTROL_PORT), timeout=1.5) as conn:
+            with socket.create_connection(
+                (CONTROL_HOST, CONTROL_PORT), timeout=CONTROL_CONNECT_TIMEOUT_SEC
+            ) as conn:
+                if action == ACTION_EXIT:
+                    conn.settimeout(EXIT_COMMAND_RESPONSE_TIMEOUT_SEC)
                 conn.sendall(action.encode("utf-8"))
                 conn.recv(32)
                 return True

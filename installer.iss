@@ -4,9 +4,10 @@
 #define MyAppPublisher "FlyPrint"
 #define MyAppExeName "flyprint-edge.exe"
 #define MyLauncherExeName "flyprint-launcher.exe"
+#define MyLauncherMutex "Global\FlyPrintEdgeLauncher"
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.72"
+  #define MyAppVersion "1.0.73"
 #endif
 
 [Setup]
@@ -30,6 +31,23 @@ CloseApplications=no
 RestartApplications=no
 
 [Code]
+function WaitForLauncherExit: Boolean;
+var
+  Attempt: Integer;
+begin
+  { The exit command is acknowledged before the launcher process releases its mutex. }
+  for Attempt := 1 to 200 do
+  begin
+    if not CheckForMutexes('{#MyLauncherMutex}') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Sleep(100);
+  end;
+  Result := not CheckForMutexes('{#MyLauncherMutex}');
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   LauncherPath: String;
@@ -46,8 +64,14 @@ begin
     Exit;
   end;
 
-  if ResultCode <> 0 then
-    Result := 'FlyPrint Edge 未能正常停止。请关闭 FlyPrint Edge 后重试。';
+  { Older launchers may time out while the primary instance is still finishing shutdown. }
+  if not WaitForLauncherExit then
+  begin
+    if ResultCode <> 0 then
+      Result := 'FlyPrint Edge 未能正常停止。请关闭 FlyPrint Edge 后重试。'
+    else
+      Result := 'FlyPrint Edge 仍在退出中。请关闭 FlyPrint Edge 后重试。';
+  end;
 end;
 
 [Languages]
